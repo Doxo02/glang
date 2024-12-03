@@ -1,0 +1,6 @@
+// argc: i32, argv: char** 
+
+fn main() -> i32 {
+    syscall(1, 1, "Hello World!", 12, 0, 0, 0);
+    return 0;
+}

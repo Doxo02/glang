@@ -1,0 +1,26 @@
+ID := [a-zA-Z] [a-zA-Z0-9]*
+INT_LIT := [0-9]+
+
+type := "i8" | "i16" | "i32" | "i64" | "void" | "char" | "f32" | "f64"
+type_ident := type | ('*')+type | type('['INT_LIT']')+
+
+declaration := ID ':' type_ident ';'
+
+statement := if_statement | return_statement | scope | call_statement
+
+scope := '{' (statement)* '}'
+
+if_statement := "if" '(' expression ')' statement ("else" statement)?
+
+return_statement := "return" expression ';'
+
+arg_list := | expression | expression ',' arg_list
+call_statement := ID '(' arg_list ')' ';'
+
+arg_def_list :=  | ID ':' type_ident | arg_def_list ',' arg_def_list
+function_definition := "fn" ID '('arg_def_list')' "->" type_ident statement
+
+expression := 
+      INT_LIT
+    | STRING_LIT
+    | '(' expression ')'
