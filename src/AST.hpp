@@ -62,6 +62,7 @@ public:
         out.append(std::to_string(value));
         return out;
     }
+    
     int value;
 };
 
@@ -77,6 +78,7 @@ public:
         out.append(value);
         return out;
     }
+    
     std::string value;
 };
 
@@ -155,6 +157,7 @@ public:
         out.erase(out.find_last_of('\n'));
         return out;
     }
+    
     Identifier id;
     std::vector<Expression*> arguments;
 };
