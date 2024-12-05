@@ -4,11 +4,18 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <stack>
+
+#include "OpCode.hpp"
 
 class Visitor;
 
 enum class TypeIdentifierType {
     I8, I16, I32, I64, VOID, CHAR, F32, F64
+};
+
+enum class BinaryOperator {
+    PLUS, MINUS, MUL, DIV
 };
 
 inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
@@ -84,6 +91,47 @@ public:
     std::string value;
 };
 
+class BinaryExpression : public Expression {
+public:
+    BinaryExpression(BinaryOperator op, Expression* left, Expression* right) {
+        this->op = op;
+        this->left = left;
+        this->right = right;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out = "";
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        switch(op) {
+            case BinaryOperator::PLUS:
+                out.append("Plus: ");
+                break;
+            case BinaryOperator::MINUS:
+                out.append("Minus: ");
+                break;
+            case BinaryOperator::MUL:
+                out.append("Mul: ");
+                break;
+            case BinaryOperator::DIV:
+                out.append("Div: ");
+                break;
+        }
+
+        out.append("\n");
+        out.append(left->toString(indentLevel + 1));
+        out.append("\n");
+        out.append(right->toString(indentLevel + 1));
+
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    BinaryOperator op;
+    Expression* left;
+    Expression* right;
+};
+
 class Statement {
 public:
     virtual std::string toString(int indentLevel) = 0;
@@ -130,8 +178,8 @@ public:
     std::string toString(int indentLevel) override {
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
-        out.append("Return: ");
-        out.append(value->toString(0));
+        out.append("Return:\n");
+        out.append(value->toString(indentLevel + 1));
 
         return out;
     }
@@ -216,13 +264,14 @@ class Program {
 public:
     void accept(Visitor* visitor);
 
-    FunctionDefinition main;
+    std::vector<FunctionDefinition*> functions;
 };
 
 class Visitor {
 public:
     virtual void visitIntLit(IntLit* expr) = 0;
     virtual void visitStringLit(StringLit* expr) = 0;
+    virtual void visitBinaryExpression(BinaryExpression* expr) = 0;
 
     virtual void visitScope(Scope* stmt) = 0;
     virtual void visitIf(If* stmt) = 0;
@@ -245,6 +294,34 @@ public:
 
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
+};
+
+class CodeGenVisitor : public Visitor {
+public:
+    void visitIntLit(IntLit* expr) override;
+    void visitStringLit(StringLit* expr) override;
+    void visitBinaryExpression(BinaryExpression* expr) override;
+
+    void visitScope(Scope *stmt) override;
+    void visitIf(If* stmt) override;
+    void visitReturn(Return* stmt) override;
+    void visitCallStatement(CallStatement* stmt) override;
+
+    void visitFunctionDefinition(FunctionDefinition* def) override;
+    void visitProgram(Program* prog) override;
+
+    std::stack<std::string> getStack();
+
+    std::vector<OpCode*> getDataSegment();
+    std::vector<OpCode*> getTextSegment();
+
+private:
+    std::stack<std::string> stack;
+
+    std::vector<OpCode*> dataSegment;
+    std::vector<OpCode*> textSegment;
+
+    int stringIndex = 0;
 };
 
 #endif

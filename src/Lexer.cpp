@@ -77,10 +77,23 @@ void Lexer::passLine(std::string line, unsigned int number) {
                 case '-':
                     if(line.at(i+1) == '>')
                         tokens.push_back(Token{RARROW});
+                    else
+                        tokens.push_back(Token{MINUS});
                     break;
                 case '/':
                     if(line.at(i+1) == '/')
                         commentFound = true;
+                    else
+                        tokens.push_back(Token{DIV});
+                    break;
+                case '+':
+                    tokens.push_back(Token{PLUS});
+                    break;
+                case '*':
+                    tokens.push_back(Token{MUL});
+                    break;
+                case ',':
+                    tokens.push_back(Token{COMMA});
                     break;
             }
         }
