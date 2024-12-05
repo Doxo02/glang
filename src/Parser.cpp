@@ -258,4 +258,6 @@ int Parser::findEndParen() {
             else openings--;
         }
     }
+
+    return -1;
 }
