@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 
+#include "AST.hpp"
 #include "Lexer.hpp"
 #include "Parser.hpp"
 
@@ -26,7 +27,11 @@ int main(int argc, char** argv) {
 
     Program program = parser.parse();
 
-    printParseTree(program);
+    //printParseTree(program);
+
+    PrintVisitor visitor;
+
+    program.accept(&visitor);
 
     return 0;
 }

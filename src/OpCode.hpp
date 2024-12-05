@@ -44,6 +44,7 @@ class DefineString : public OpCode {
         out.append(": db \"");
         out.append(toDefine);
         out.append("\"");
+        return out;
     }
 
     std::string toDefine;

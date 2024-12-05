@@ -1,5 +1,6 @@
 #include "Parser.hpp"
 
+#include <cstddef>
 #include <iostream>
 
 Parser::Parser(std::vector<Token> tokens) {
@@ -105,7 +106,7 @@ Statement* Parser::parseStatement()
         }
     }
 
-    return new Statement();
+    return nullptr;
 }
 
 Expression* Parser::parseExpression()
@@ -116,7 +117,7 @@ Expression* Parser::parseExpression()
         return new IntLit(consumeInt().value());
     }
 
-    return new Expression{};
+    return nullptr;
 }
 
 std::vector<Expression*> Parser::parseArgs()
