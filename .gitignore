@@ -1,3 +1,6 @@
 build/*
 CMakePresets.json
 .vscode/*
+examples/*.asm
+examples/*.o
+examples/*.out

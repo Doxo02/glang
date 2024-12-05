@@ -1,10 +1,12 @@
 #include <iostream>
 #include <fstream>
+#include <string>
 
+#include "AST.hpp"
 #include "Lexer.hpp"
 #include "Parser.hpp"
 
-void printParseTree(Program program);
+void printParseTree(Program* program);
 
 int main(int argc, char** argv) {
     if(argc < 2) {
@@ -12,7 +14,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::ifstream srcFile(argv[1]);
+    std::string fileName = argv[1];
+
+    std::ifstream srcFile(fileName);
 
     std::string line;
     Lexer lexer;
@@ -22,16 +26,48 @@ int main(int argc, char** argv) {
     }
     srcFile.close();
 
+    std::string outFileName = fileName.replace(fileName.find(".glang"), 6, ".asm");
+
     Parser parser(lexer.getTokens());
 
-    Program program = parser.parse();
+    Program* program = parser.parse();
 
     printParseTree(program);
+
+    CodeGenVisitor visitor;
+
+    
+    program->accept(&visitor);
+
+    auto data = visitor.getDataSegment();
+    auto text = visitor.getTextSegment();
+
+    std::ofstream outFile(outFileName);
+
+    outFile << "section .text" << std::endl;
+    outFile << "global _start" << std::endl;
+    outFile << "_start:" << std::endl;
+    outFile << "\tcall main" << std::endl;
+    outFile << "\tmov rdi, rax" << std::endl;
+    outFile << "\tmov rax, 60" << std::endl;
+    outFile << "\tsyscall" << std::endl;
+
+    for(auto t: text) {
+        outFile << t->genNasm() << std::endl;
+    }
+
+    outFile << "section .data" << std::endl;
+
+    for(auto d : data) {
+        outFile << d->genNasm() << std::endl;
+    }
+    
 
     return 0;
 }
 
-void printParseTree(Program program) {
-    std::cout << program.main.toString(0) << std::endl;
-    
+void printParseTree(Program* program) {
+    for(FunctionDefinition* def : program->functions) {
+        std::cout << def->toString(0) << std::endl;
+    }
 }

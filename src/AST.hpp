@@ -1,13 +1,21 @@
 #ifndef AST_HPP
 #define AST_HPP
 
-#include "Token.hpp"
+#include <string>
 #include <vector>
 #include <map>
-#include <iostream>
+#include <stack>
+
+#include "OpCode.hpp"
+
+class Visitor;
 
 enum class TypeIdentifierType {
     I8, I16, I32, I64, VOID, CHAR, F32, F64
+};
+
+enum class BinaryOperator {
+    PLUS, MINUS, MUL, DIV
 };
 
 inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
@@ -42,12 +50,9 @@ struct Identifier {
 
 class Expression {
 public:
-    virtual std::string toString(int indentLevel) {
-        std::string out = "";
-        for(int i = 0; i < indentLevel; i++) out.append("  ");
-        out.append("Expression");
-        return out;
-    }
+    virtual std::string toString(int indentLevel) = 0;
+
+    virtual void accept(Visitor* visitor) = 0;
 };
 
 class IntLit : public Expression {
@@ -55,13 +60,16 @@ public:
     IntLit(int value) {
         this->value = value;
     }
-    virtual std::string toString(int indentLevel) {
+    std::string toString(int indentLevel) override {
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("IntLit: ");
         out.append(std::to_string(value));
         return out;
     }
+
+    void accept(Visitor* visitor) override;
+    
     int value;
 };
 
@@ -70,24 +78,65 @@ public:
     StringLit(std::string value) {
         this->value = value;
     }
-    virtual std::string toString(int indentLevel) {
+    std::string toString(int indentLevel) override {
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("StringLit: ");
         out.append(value);
         return out;
     }
+
+    void accept(Visitor* visitor) override;
+    
     std::string value;
+};
+
+class BinaryExpression : public Expression {
+public:
+    BinaryExpression(BinaryOperator op, Expression* left, Expression* right) {
+        this->op = op;
+        this->left = left;
+        this->right = right;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out = "";
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        switch(op) {
+            case BinaryOperator::PLUS:
+                out.append("Plus: ");
+                break;
+            case BinaryOperator::MINUS:
+                out.append("Minus: ");
+                break;
+            case BinaryOperator::MUL:
+                out.append("Mul: ");
+                break;
+            case BinaryOperator::DIV:
+                out.append("Div: ");
+                break;
+        }
+
+        out.append("\n");
+        out.append(left->toString(indentLevel + 1));
+        out.append("\n");
+        out.append(right->toString(indentLevel + 1));
+
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    BinaryOperator op;
+    Expression* left;
+    Expression* right;
 };
 
 class Statement {
 public:
-    virtual std::string toString(int indentLevel) {
-        std::string out = "";
-        for(int i = 0; i < indentLevel; i++) out.append("  ");
-        out.append("Statement");
-        return out;
-    }
+    virtual std::string toString(int indentLevel) = 0;
+
+    virtual void accept(Visitor* visitor) = 0;
 };
 
 class Scope : public Statement {
@@ -96,7 +145,7 @@ public:
         this->statements = statements;
     }
 
-    virtual std::string toString(int indentLevel) {
+    std::string toString(int indentLevel) override {
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("Scope\n");
@@ -108,6 +157,8 @@ public:
         out.erase(out.find_last_of('\n'));
         return out;
     }
+
+    void accept(Visitor* visitor) override;
 
     std::vector<Statement*> statements;
 };
@@ -124,14 +175,16 @@ public:
         this->value = value;
     }
 
-    virtual std::string toString(int indentLevel) {
+    std::string toString(int indentLevel) override {
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
-        out.append("Return: ");
-        out.append(value->toString(0));
+        out.append("Return:\n");
+        out.append(value->toString(indentLevel + 1));
 
         return out;
     }
+
+    void accept(Visitor* visitor) override;
 
     Expression* value;
 };
@@ -142,7 +195,7 @@ public:
         this->id = id;
         this->arguments = arguments;
     }
-    virtual std::string toString(int indentLevel) {
+    std::string toString(int indentLevel) override {
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("CallStatement: ");
@@ -155,6 +208,9 @@ public:
         out.erase(out.find_last_of('\n'));
         return out;
     }
+
+    void accept(Visitor* visitor) override;
+    
     Identifier id;
     std::vector<Expression*> arguments;
 };
@@ -196,6 +252,8 @@ public:
         return out;
     }
     
+    void accept(Visitor* visitor);
+
     Identifier id;
     Statement* body;
     TypeIdentifier returnType;
@@ -204,7 +262,66 @@ public:
 
 class Program {
 public:
-    FunctionDefinition main;
+    void accept(Visitor* visitor);
+
+    std::vector<FunctionDefinition*> functions;
+};
+
+class Visitor {
+public:
+    virtual void visitIntLit(IntLit* expr) = 0;
+    virtual void visitStringLit(StringLit* expr) = 0;
+    virtual void visitBinaryExpression(BinaryExpression* expr) = 0;
+
+    virtual void visitScope(Scope* stmt) = 0;
+    virtual void visitIf(If* stmt) = 0;
+    virtual void visitReturn(Return* stmt) = 0;
+    virtual void visitCallStatement(CallStatement* stmt) = 0;
+
+    virtual void visitFunctionDefinition(FunctionDefinition* def) = 0;
+    virtual void visitProgram(Program* prog) = 0;
+};
+
+class PrintVisitor : public Visitor {
+public:
+    void visitIntLit(IntLit* expr) override;
+    void visitStringLit(StringLit* expr) override;
+
+    void visitScope(Scope* stmt) override;
+    void visitIf(If* stmt) override;
+    void visitReturn(Return* stmt) override;
+    void visitCallStatement(CallStatement* stmt) override;
+
+    void visitFunctionDefinition(FunctionDefinition* def) override;
+    void visitProgram(Program* prog) override;
+};
+
+class CodeGenVisitor : public Visitor {
+public:
+    void visitIntLit(IntLit* expr) override;
+    void visitStringLit(StringLit* expr) override;
+    void visitBinaryExpression(BinaryExpression* expr) override;
+
+    void visitScope(Scope *stmt) override;
+    void visitIf(If* stmt) override;
+    void visitReturn(Return* stmt) override;
+    void visitCallStatement(CallStatement* stmt) override;
+
+    void visitFunctionDefinition(FunctionDefinition* def) override;
+    void visitProgram(Program* prog) override;
+
+    std::stack<std::string> getStack();
+
+    std::vector<OpCode*> getDataSegment();
+    std::vector<OpCode*> getTextSegment();
+
+private:
+    std::stack<std::string> stack;
+
+    std::vector<OpCode*> dataSegment;
+    std::vector<OpCode*> textSegment;
+
+    int stringIndex = 0;
 };
 
 #endif

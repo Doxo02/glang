@@ -4,3 +4,7 @@ fn main() -> i32 {
     syscall(1, 1, "Hello World!", 12, 0, 0, 0);
     return 0;
 }
+
+fn add() -> i32 {
+    return (1+2)*3;
+}

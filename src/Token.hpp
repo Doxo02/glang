@@ -16,6 +16,11 @@ enum TokType {
     LBRACE,
     RBRACE,
     RARROW,
+    PLUS,
+    MINUS,
+    MUL,
+    DIV,
+    COMMA,
 };
 
 struct Token {
@@ -62,12 +67,27 @@ struct Token {
         case RARROW:
             out.append("RARROW");
             break;
+        case PLUS:
+            out.append("PLUS");
+            break;
+        case MINUS:
+            out.append("MINUS");
+            break;
+        case MUL:
+            out.append("MUL");
+            break;
+        case DIV:
+            out.append("DIV");
+            break;
+        case COMMA:
+            out.append("COMMA");
+            break;
         default:
-            out.append("def");
+            out.append("");
         }
 
         if(intValue.has_value()) {
-            out.append(": " + intValue.value());
+            out.append(": " + std::to_string(intValue.value()));
         }
         if(stringValue.has_value()) {
             out.append(": " + stringValue.value());
