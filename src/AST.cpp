@@ -86,6 +86,64 @@ void PrintVisitor::visitReturn(Return* stmt) {
     std::cout << "Visiting Return..." << std::endl;
 }
 
+// ConstExprVisitor implementation
+
+void ConstExprVisitor::visitIntLit(IntLit* expr) {
+    stack.push(expr->value);
+}
+
+void ConstExprVisitor::visitStringLit(StringLit* expr) {
+    stack.push({});
+}
+
+void ConstExprVisitor::visitBinaryExpression(BinaryExpression* expr) {
+    int left;
+    int right;
+    if(stack.top().has_value()) left = stack.top().value();
+    else return;
+    stack.pop();
+    if(stack.top().has_value()) right = stack.top().value();
+    else return;
+    stack.pop();
+
+    switch(expr->op) {
+        case BinaryOperator::PLUS:
+            stack.push(left + right);
+            break;
+        case BinaryOperator::MINUS:
+            stack.push(left - right);
+            break;
+        case BinaryOperator::MUL:
+            stack.push(left * right);
+            break;
+        case BinaryOperator::DIV:
+            stack.push(left / right);
+            break;
+    }
+}
+
+void ConstExprVisitor::visitScope(Scope* stmt) {}
+
+void ConstExprVisitor::visitIf(If* stmt) {}
+
+void ConstExprVisitor::visitReturn(Return* stmt) {
+    if(stack.top().has_value())
+        stmt->value = new IntLit(stack.top().value());
+}
+
+void ConstExprVisitor::visitCallStatement(CallStatement* stmt) {
+    for(int i = 0; i < stmt->arguments.size(); i++) {
+        stmt->arguments.at(i)->accept(this);
+
+        if(stack.top().has_value()) stmt->arguments.at(i) = new IntLit(stack.top().value());
+        stack.pop();
+    }
+}
+
+void ConstExprVisitor::visitFunctionDefinition(FunctionDefinition* def) {}
+
+void ConstExprVisitor::visitProgram(Program* prog) {}
+
 // CodeGenVisitor implementation
 
 void CodeGenVisitor::visitIntLit(IntLit* expr) {

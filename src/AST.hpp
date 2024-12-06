@@ -1,6 +1,7 @@
 #ifndef AST_HPP
 #define AST_HPP
 
+#include <optional>
 #include <string>
 #include <vector>
 #include <map>
@@ -294,6 +295,24 @@ public:
 
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
+};
+
+class ConstExprVisitor : public Visitor {
+public:
+    void visitIntLit(IntLit* expr) override;
+    void visitStringLit(StringLit* expr) override;
+    void visitBinaryExpression(BinaryExpression* expr) override;
+
+    void visitScope(Scope* stmt) override;
+    void visitIf(If* stmt) override;
+    void visitReturn(Return* stmt) override;
+    void visitCallStatement(CallStatement* stmt) override;
+
+    void visitFunctionDefinition(FunctionDefinition* def) override;
+    void visitProgram(Program* prog) override;
+
+private:
+    std::stack<std::optional<int>> stack;
 };
 
 class CodeGenVisitor : public Visitor {

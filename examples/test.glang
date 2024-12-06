@@ -6,5 +6,5 @@ fn main() -> i32 {
 }
 
 fn add() -> i32 {
-    return (1+2)*3;
+    return 0;
 }

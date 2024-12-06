@@ -148,7 +148,7 @@ Expression* Parser::parseAddSub(int until) {
 
     int next;
     BinaryOperator op;
-    if(nextPlus > nextMinus && nextMinus != -1) {
+    if((nextPlus > nextMinus && nextMinus != -1) || nextPlus == -1) {
         next = nextMinus;
         op = BinaryOperator::MINUS;
     } else {

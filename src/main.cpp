@@ -32,7 +32,10 @@ int main(int argc, char** argv) {
 
     Program* program = parser.parse();
 
-    printParseTree(program);
+    ConstExprVisitor cVisitor;
+    program->accept(&cVisitor);
+
+    //printParseTree(program);
 
     CodeGenVisitor visitor;
 
