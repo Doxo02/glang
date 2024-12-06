@@ -12,7 +12,7 @@
 class Visitor;
 
 enum class TypeIdentifierType {
-    I8, I16, I32, I64, VOID, CHAR, F32, F64
+    I8, I16, I32, I64, VOID, CHAR, F32, F64, BOOL
 };
 
 enum class BinaryOperator {
@@ -37,6 +37,8 @@ inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
             return "F32";
         case TypeIdentifierType::F64:
             return "F64";
+        case TypeIdentifierType::BOOL:
+            return "BOOL";
     }
     return "";
 }
@@ -90,6 +92,25 @@ public:
     void accept(Visitor* visitor) override;
     
     std::string value;
+};
+
+class IdExpression : public Expression {
+public:
+    IdExpression(Identifier id) {
+        this->id = id;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out = "";
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("IdExpression: ");
+        out.append(id.name);
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    Identifier id;
 };
 
 class BinaryExpression : public Expression {
@@ -216,6 +237,41 @@ public:
     std::vector<Expression*> arguments;
 };
 
+class VarAssignment : public Statement {
+public:
+    VarAssignment(Identifier id, Expression* value) {
+        this->id = id;
+        this->value = value;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out = "";
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append(id.name);
+        out.append(" = ");
+        out.append(value->toString(0));
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    Identifier id;
+    Expression* value;
+};
+
+class VarDeclaration {
+public:
+    VarDeclaration(Identifier id, TypeIdentifier type) {
+        this->id = id;
+        this->type = type;
+    }
+
+    void accept(Visitor* visitor);
+    
+    Identifier id;
+    TypeIdentifier type;
+};
+
 class FunctionDefinition {
 public:
     FunctionDefinition(Identifier id, Statement* body, TypeIdentifier returnType, std::map<Identifier, TypeIdentifier> args) {
@@ -265,6 +321,7 @@ class Program {
 public:
     void accept(Visitor* visitor);
 
+    std::vector<VarDeclaration*> declarations;
     std::vector<FunctionDefinition*> functions;
 };
 
@@ -272,13 +329,16 @@ class Visitor {
 public:
     virtual void visitIntLit(IntLit* expr) = 0;
     virtual void visitStringLit(StringLit* expr) = 0;
+    virtual void visitIdExpression(IdExpression* expr) = 0;
     virtual void visitBinaryExpression(BinaryExpression* expr) = 0;
 
     virtual void visitScope(Scope* stmt) = 0;
     virtual void visitIf(If* stmt) = 0;
     virtual void visitReturn(Return* stmt) = 0;
     virtual void visitCallStatement(CallStatement* stmt) = 0;
+    virtual void visitVarAssignment(VarAssignment* stmt) = 0;
 
+    virtual void visitVarDeclaration(VarDeclaration* decl) = 0;
     virtual void visitFunctionDefinition(FunctionDefinition* def) = 0;
     virtual void visitProgram(Program* prog) = 0;
 };
@@ -301,13 +361,16 @@ class ConstExprVisitor : public Visitor {
 public:
     void visitIntLit(IntLit* expr) override;
     void visitStringLit(StringLit* expr) override;
+    void visitIdExpression(IdExpression* expr) override;
     void visitBinaryExpression(BinaryExpression* expr) override;
 
     void visitScope(Scope* stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
+    void visitVarAssignment(VarAssignment* stmt) override;
 
+    void visitVarDeclaration(VarDeclaration* decl) override;
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
 
@@ -319,13 +382,16 @@ class CodeGenVisitor : public Visitor {
 public:
     void visitIntLit(IntLit* expr) override;
     void visitStringLit(StringLit* expr) override;
+    void visitIdExpression(IdExpression* expr) override;
     void visitBinaryExpression(BinaryExpression* expr) override;
 
     void visitScope(Scope *stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
+    void visitVarAssignment(VarAssignment* stmt) override;
 
+    void visitVarDeclaration(VarDeclaration* decl) override;
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
 

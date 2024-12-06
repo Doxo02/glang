@@ -12,6 +12,7 @@ Parser::Parser(std::vector<Token> tokens) {
 
 Program* Parser::parse() {
     std::vector<FunctionDefinition*> defs;
+    std::vector<VarDeclaration*> decls;
     while(counter < tokens.size()) {
         std::string str = consumeString().value();
 
@@ -46,36 +47,23 @@ Program* Parser::parse() {
             }
 
             auto typeId = typeId_opt.value();
-            TypeIdentifier type;
-
-            if(typeId == "i8") {
-                type = {TypeIdentifierType::I8};
-            } else if(typeId == "i16") {
-                type = {TypeIdentifierType::I16};
-            } else if(typeId == "i32") {
-                type = {TypeIdentifierType::I32};
-            } else if(typeId == "i64") {
-                type = {TypeIdentifierType::I64};
-            } else if(typeId == "void") {
-                type = {TypeIdentifierType::VOID};
-            } else if(typeId == "char") {
-                type = {TypeIdentifierType::CHAR};
-            } else if(typeId == "f32") {
-                type = {TypeIdentifierType::F32};
-            } else if(typeId == "f64") {
-                type = {TypeIdentifierType::F64};
-            }
+            TypeIdentifier type = TypeIdentifier{strToTypeId(typeId)};
 
             Statement* body = parseStatement();
 
             defs.push_back(new FunctionDefinition(id, body, type, {}));
+        } else if(str == "let") {
+            Identifier id{consumeString().value()};
+            consume(COLON);
+            TypeIdentifier type = TypeIdentifier{strToTypeId(consumeString().value())};
+            consume(SEMI);
+            decls.push_back(new VarDeclaration(id, type));
         }
     }
-    return new Program{defs};
+    return new Program{decls, defs};
 }
 
-Statement* Parser::parseStatement()
-{
+Statement* Parser::parseStatement() {
     if(peek().type == LCURLY) {
         consume(LCURLY);
         
@@ -98,19 +86,23 @@ Statement* Parser::parseStatement()
             }
             return new Return(expr);
         } else {  
-            if(!consume(LPAREN)) {
-                std::cout << "Ya messed up bitch!" << std::endl;
-                exit(EXIT_FAILURE);
-            }
+            if(peek().type == LPAREN) {
+                consume(LPAREN);
+                std::vector<Expression*> args = parseArgs(findEndParen());
+                
+                if(!consume(RPAREN) || !consume(SEMI)) {
+                    std::cout << "Ya messed up bitch!" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
 
-            std::vector<Expression*> args = parseArgs(findEndParen());
-            
-            if(!consume(RPAREN) || !consume(SEMI)) {
-                std::cout << "Ya messed up bitch!" << std::endl;
-                exit(EXIT_FAILURE);
-            }
+                return new CallStatement(Identifier{id}, args);
+            } else if(peek().type == EQUAL) {
+                consume(EQUAL);
+                Expression* val = parseExpression(findNext(SEMI, tokens.size()));
+                consume(SEMI);
 
-            return new CallStatement(Identifier{id}, args);
+                return new VarAssignment(Identifier{id}, val);
+            }
         }
     }
 
@@ -137,6 +129,8 @@ Expression* Parser::parseSingle(int until) {
         return new IntLit(consumeInt().value());
     } else if(peek().type == STRING_LITERAL) {
         return new StringLit(consumeString().value());
+    } else if(peek().type == IDENTIFIER) {
+        return new IdExpression(Identifier{consumeString().value()});
     }
 }
 
@@ -260,4 +254,24 @@ int Parser::findEndParen() {
     }
 
     return -1;
+}
+
+TypeIdentifierType Parser::strToTypeId(std::string str) {
+    if(str == "i8") {
+        return TypeIdentifierType::I8;
+    } else if(str == "i16") {
+        return TypeIdentifierType::I16;
+    } else if(str == "i32") {
+        return TypeIdentifierType::I32;
+    } else if(str == "i64") {
+        return TypeIdentifierType::I64;
+    } else if(str == "void") {
+        return TypeIdentifierType::VOID;
+    } else if(str == "char") {
+        return TypeIdentifierType::CHAR;
+    } else if(str == "f32") {
+        return TypeIdentifierType::F32;
+    } else if(str == "f64") {
+        return TypeIdentifierType::F64;
+    }
 }

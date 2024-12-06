@@ -156,8 +156,8 @@ public:
         std::string out = "\t";
         out.append(id);
         out.append(": db \"");
-        out.append(toDefine);
-        out.append("\"");
+        out.append(toDefine.replace(toDefine.find("\\n"), 2, "\", 0xA, 0xD, \""));
+        out.append("\", 0");
         return out;
     }
 
@@ -165,6 +165,26 @@ private:
     std::string toDefine;
     std::string id;
     int index;
+};
+
+class DefineVar : public OpCode {
+public:
+    DefineVar(std::string id, std::string type) {
+        this->id = id;
+        this->type = type;
+    }
+
+    std::string genNasm() override {
+        std::string out = "\t";
+        out.append(id);
+        out.append(": ");
+        out.append(type);
+        out.append(" 0");
+        return out;
+    }
+private:
+    std::string id;
+    std::string type;
 };
 
 #endif

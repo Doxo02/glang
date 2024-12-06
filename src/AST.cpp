@@ -15,6 +15,10 @@ void StringLit::accept(Visitor* visitor)  {
     visitor->visitStringLit(this);
 }
 
+void IdExpression::accept(Visitor* visitor) {
+    visitor->visitIdExpression(this);
+}
+
 void BinaryExpression::accept(Visitor* visitor) {
     right->accept(visitor);
     left->accept(visitor);
@@ -40,12 +44,24 @@ void CallStatement::accept(Visitor* visitor) {
     visitor->visitCallStatement(this);
 }
 
+void VarAssignment::accept(Visitor* visitor) {
+    value->accept(visitor);
+    visitor->visitVarAssignment(this);
+}
+
+void VarDeclaration::accept(Visitor* visitor) {
+    visitor->visitVarDeclaration(this);
+}
+
 void FunctionDefinition::accept(Visitor* visitor) {
     visitor->visitFunctionDefinition(this);
     body->accept(visitor);
 }
 
 void Program::accept(Visitor* visitor) {
+    for(VarDeclaration* decl : declarations) {
+        decl->accept(visitor);
+    }
     for(FunctionDefinition* def : functions) {
         def->accept(visitor);
     }
@@ -96,6 +112,10 @@ void ConstExprVisitor::visitStringLit(StringLit* expr) {
     stack.push({});
 }
 
+void ConstExprVisitor::visitIdExpression(IdExpression* expr) {
+    stack.push({});
+}
+
 void ConstExprVisitor::visitBinaryExpression(BinaryExpression* expr) {
     int left;
     int right;
@@ -140,7 +160,14 @@ void ConstExprVisitor::visitCallStatement(CallStatement* stmt) {
     }
 }
 
-void ConstExprVisitor::visitFunctionDefinition(FunctionDefinition* def) {}
+void ConstExprVisitor::visitVarAssignment(VarAssignment *stmt) {
+    if(stack.top().has_value()) stmt->value = new IntLit(stack.top().value());
+    stack.pop();
+}
+
+void ConstExprVisitor::visitVarDeclaration(VarDeclaration *decl) {}
+
+void ConstExprVisitor::visitFunctionDefinition(FunctionDefinition *def) {}
 
 void ConstExprVisitor::visitProgram(Program* prog) {}
 
@@ -155,6 +182,10 @@ void CodeGenVisitor::visitStringLit(StringLit* expr) {
 
     dataSegment.push_back(code);
     stack.push(code->getId());
+}
+
+void CodeGenVisitor::visitIdExpression(IdExpression* expr) {
+    stack.push("[" + expr->id.name + "]");
 }
 
 void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr) {
@@ -207,7 +238,31 @@ void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {
     }
 }
 
-void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition* def) {
+void CodeGenVisitor::visitVarAssignment(VarAssignment *stmt) {
+    std::string val = stack.top();
+    stack.pop();
+
+    textSegment.push_back(new Move("dword [" + stmt->id.name + "]", val));
+}
+
+void CodeGenVisitor::visitVarDeclaration(VarDeclaration* decl) {
+    switch(decl->type.type) {
+        case TypeIdentifierType::I8:
+            dataSegment.push_back(new DefineVar(decl->id.name, "db"));
+            break;
+        case TypeIdentifierType::I16:
+            dataSegment.push_back(new DefineVar(decl->id.name, "dw"));
+            break;
+        case TypeIdentifierType::I32:
+            dataSegment.push_back(new DefineVar(decl->id.name, "dd"));
+            break;
+        case TypeIdentifierType::I64:
+            dataSegment.push_back(new DefineVar(decl->id.name, "dq"));
+            break;
+    }
+}
+
+void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {
     textSegment.push_back(new Label(def->id.name));
 }
 

@@ -1,0 +1,5 @@
+
+
+fn sys_write(msg: char*) -> void {
+    syscall(1, 1, msg, len(msg), 0, 0, 0);
+}

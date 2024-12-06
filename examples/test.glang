@@ -1,7 +1,10 @@
 // argc: i32, argv: char** 
 
+let x: i32;
+let y: i32;
+
 fn main() -> i32 {
-    syscall(1, 1, "Hello World!", 12, 0, 0, 0);
+    syscall(1, 0, "Hello World!\ntest", 18, 0, 0, 0);
     return 0;
 }
 

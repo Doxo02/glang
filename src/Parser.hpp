@@ -34,6 +34,8 @@ private:
     int findNext(TokType type, int until);
     int findNextOutsideParen(TokType type, int until);
     int findEndParen();
+
+    TypeIdentifierType strToTypeId(std::string str);
 };
 
 #endif

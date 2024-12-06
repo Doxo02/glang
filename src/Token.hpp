@@ -21,6 +21,13 @@ enum TokType {
     MUL,
     DIV,
     COMMA,
+    ASSIGN,
+    COLON,
+    EQUALS,
+    GREATER,
+    LESS,
+    LEQUALS,
+    GEQUALS
 };
 
 struct Token {
@@ -81,6 +88,24 @@ struct Token {
             break;
         case COMMA:
             out.append("COMMA");
+            break;
+        case ASSIGN:
+            out.append("ASSIGN");
+            break;
+        case EQUALS:
+            out.append("EQUALS");
+            break;
+        case GREATER:
+            out.append("GREATER");
+            break;
+        case LESS:
+            out.append("LESS");
+            break;
+        case GEQUALS:
+            out.append("GEQUALS");
+            break;
+        case LEQUALS:
+            out.append("LEQUALS");
             break;
         default:
             out.append("");

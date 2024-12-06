@@ -75,9 +75,10 @@ void Lexer::passLine(std::string line, unsigned int number) {
                     tokens.push_back(Token{TokType::RBRACE});
                     break;
                 case '-':
-                    if(line.at(i+1) == '>')
+                    if(line.at(i+1) == '>') {
                         tokens.push_back(Token{RARROW});
-                    else
+                        i++;
+                    } else
                         tokens.push_back(Token{MINUS});
                     break;
                 case '/':
@@ -95,6 +96,28 @@ void Lexer::passLine(std::string line, unsigned int number) {
                 case ',':
                     tokens.push_back(Token{COMMA});
                     break;
+                case '=':
+                    if(line.at(i+1) == '=') {
+                        tokens.push_back(Token{EQUALS});
+                        i++;
+                    } else
+                        tokens.push_back(Token{ASSIGN});
+                    break;
+                case ':':
+                    tokens.push_back(Token{COLON});
+                    break;
+                case '>':
+                    if(line.at(i+1) == '=') {
+                        tokens.push_back(Token{GEQUALS});
+                        i++;
+                    } else
+                        tokens.push_back(Token{GREATER});
+                case '<':
+                    if(line.at(i+1) == '=') {
+                        tokens.push_back(Token{LEQUALS});
+                        i++;
+                    } else
+                        tokens.push_back(Token{LESS});
             }
         }
     }
