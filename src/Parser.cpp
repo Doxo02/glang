@@ -96,8 +96,8 @@ Statement* Parser::parseStatement() {
                 }
 
                 return new CallStatement(Identifier{id}, args);
-            } else if(peek().type == EQUAL) {
-                consume(EQUAL);
+            } else if(peek().type == ASSIGN) {
+                consume(ASSIGN);
                 Expression* val = parseExpression(findNext(SEMI, tokens.size()));
                 consume(SEMI);
 
