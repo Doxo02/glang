@@ -74,7 +74,7 @@ Statement* Parser::parseStatement() {
 
         consume(RCURLY);
 
-        return new Scope(statements);
+        return new Compound(statements);
     } else if(peek().type == IDENTIFIER) {
         std::string id = consumeString().value();
 
@@ -85,6 +85,12 @@ Statement* Parser::parseStatement() {
                 exit(EXIT_FAILURE);
             }
             return new Return(expr);
+        } else if(id == "let") {
+            Identifier id{consumeString().value()};
+            consume(COLON);
+            TypeIdentifier type = TypeIdentifier{strToTypeId(consumeString().value())};
+            consume(SEMI);
+            return new VarDeclaration(id, type);
         } else {  
             if(peek().type == LPAREN) {
                 consume(LPAREN);

@@ -26,6 +26,8 @@ int main(int argc, char** argv) {
     }
     srcFile.close();
 
+    //lexer.printTokens();
+
     std::string outFileName = fileName.replace(fileName.find(".glang"), 6, ".asm");
 
     Parser parser(lexer.getTokens());

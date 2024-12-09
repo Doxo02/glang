@@ -25,6 +25,38 @@ private:
     std::string name;
 };
 
+class Push : public OpCode {
+public:
+    Push(std::string reg) {
+        this->reg = reg;
+    }
+
+    std::string genNasm() override {
+        std::string out = "\tpush ";
+        out.append(reg);
+        return out;
+    }
+
+private:
+    std::string reg;
+};
+
+class Pop : public OpCode {
+public:
+    Pop(std::string reg) {
+        this->reg = reg;
+    }
+
+    std::string genNasm() override {
+        std::string out = "\tpop ";
+        out.append(reg);
+        return out;
+    }
+
+private:
+    std::string reg;
+};
+
 class Move : public OpCode {
 public:
     Move(std::string first, std::string second) {

@@ -25,11 +25,11 @@ void BinaryExpression::accept(Visitor* visitor) {
     visitor->visitBinaryExpression(this);
 }
 
-void Scope::accept(Visitor* visitor) {
+void Compound::accept(Visitor* visitor) {
+    visitor->visitCompound(this);
     for(Statement* stmt : statements) {
         stmt->accept(visitor);
     }
-    visitor->visitScope(this);
 }
 
 void Return::accept(Visitor* visitor) {
@@ -78,8 +78,8 @@ void PrintVisitor::visitStringLit(StringLit* expr) {
     std::cout << "Visiting StringLit..." << std::endl;
 }
 
-void PrintVisitor::visitScope(Scope* stmt) {
-    std::cout << "Visiting Scope..." << std::endl;
+void PrintVisitor::visitCompound(Compound* stmt) {
+    std::cout << "Visiting Compound..." << std::endl;
 }
 
 void PrintVisitor::visitCallStatement(CallStatement* stmt) {
@@ -142,7 +142,7 @@ void ConstExprVisitor::visitBinaryExpression(BinaryExpression* expr) {
     }
 }
 
-void ConstExprVisitor::visitScope(Scope* stmt) {}
+void ConstExprVisitor::visitCompound(Compound* stmt) {}
 
 void ConstExprVisitor::visitIf(If* stmt) {}
 
@@ -170,6 +170,34 @@ void ConstExprVisitor::visitVarDeclaration(VarDeclaration *decl) {}
 void ConstExprVisitor::visitFunctionDefinition(FunctionDefinition *def) {}
 
 void ConstExprVisitor::visitProgram(Program* prog) {}
+
+// CountVarDeclVisitor implementation
+
+CountVarDeclVisitor::CountVarDeclVisitor() {
+    varDecls = 0;
+}
+
+void CountVarDeclVisitor::visitIntLit(IntLit* expr) {}
+void CountVarDeclVisitor::visitStringLit(StringLit* expr) {}
+void CountVarDeclVisitor::visitIdExpression(IdExpression* expr) {}
+void CountVarDeclVisitor::visitBinaryExpression(BinaryExpression* expr) {}
+
+void CountVarDeclVisitor::visitCompound(Compound* stmt) {}
+void CountVarDeclVisitor::visitIf(If* stmt) {}
+void CountVarDeclVisitor::visitReturn(Return* stmt) {}
+void CountVarDeclVisitor::visitCallStatement(CallStatement* stmt) {}
+void CountVarDeclVisitor::visitVarAssignment(VarAssignment* stmt) {}
+
+void CountVarDeclVisitor::visitVarDeclaration(VarDeclaration* stmt) {
+    varDecls++;
+}
+
+void CountVarDeclVisitor::visitFunctionDefinition(FunctionDefinition* def) {}
+void CountVarDeclVisitor::visitProgram(Program* prog) {}
+
+int CountVarDeclVisitor::getNumVarDecls() {
+    return varDecls;
+}
 
 // CodeGenVisitor implementation
 
@@ -205,11 +233,19 @@ void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr) {
     stack.push("r11");
 }
 
-void CodeGenVisitor::visitScope(Scope* stmt) {}
+void CodeGenVisitor::visitCompound(Compound* stmt) {
+    textSegment.push_back(new Push("rbp"));
+    textSegment.push_back(new Move("rbp", "rsp"));
+    CountVarDeclVisitor* visitor = new CountVarDeclVisitor();
+    stmt->accept(visitor);
+    textSegment.push_back(new Sub("rsp", std::to_string(visitor->getNumVarDecls() * 8)));
+}
 
 void CodeGenVisitor::visitIf(If* stmt) {}
 
 void CodeGenVisitor::visitReturn(Return* stmt) {
+    textSegment.push_back(new Move("rsp", "rbp"));
+    textSegment.push_back(new Pop("rbp"));
     textSegment.push_back(new Move("rax", stack.top()));
     textSegment.push_back(new ReturnOp());
     stack.pop();
@@ -259,7 +295,13 @@ void CodeGenVisitor::visitVarDeclaration(VarDeclaration* decl) {
         case TypeIdentifierType::I64:
             dataSegment.push_back(new DefineVar(decl->id.name, "dq"));
             break;
-    }
+        case TypeIdentifierType::VOID:
+        case TypeIdentifierType::CHAR:
+        case TypeIdentifierType::F32:
+        case TypeIdentifierType::F64:
+        case TypeIdentifierType::BOOL:
+          break;
+        }
 }
 
 void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {

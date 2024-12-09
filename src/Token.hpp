@@ -107,6 +107,9 @@ struct Token {
         case LEQUALS:
             out.append("LEQUALS");
             break;
+        case COLON:
+            out.append("COLON");
+            break;
         default:
             out.append("");
         }

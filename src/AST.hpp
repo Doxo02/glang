@@ -161,16 +161,16 @@ public:
     virtual void accept(Visitor* visitor) = 0;
 };
 
-class Scope : public Statement {
+class Compound : public Statement {
 public:
-    Scope(std::vector<Statement*> statements) {
+    Compound(std::vector<Statement*> statements) {
         this->statements = statements;
     }
 
     std::string toString(int indentLevel) override {
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
-        out.append("Scope\n");
+        out.append("Compound\n");
 
         for(Statement* statement : statements) {
             out.append(statement->toString(indentLevel + 1));
@@ -259,14 +259,23 @@ public:
     Expression* value;
 };
 
-class VarDeclaration {
+class VarDeclaration : public Statement {
 public:
     VarDeclaration(Identifier id, TypeIdentifier type) {
         this->id = id;
         this->type = type;
     }
 
-    void accept(Visitor* visitor);
+    std::string toString(int indentLevel) override {
+        std::string out = "";
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append(id.name);
+        out.append(": ");
+        out.append(typeIdentifierTypeToString(type.type));
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
     
     Identifier id;
     TypeIdentifier type;
@@ -332,7 +341,7 @@ public:
     virtual void visitIdExpression(IdExpression* expr) = 0;
     virtual void visitBinaryExpression(BinaryExpression* expr) = 0;
 
-    virtual void visitScope(Scope* stmt) = 0;
+    virtual void visitCompound(Compound* stmt) = 0;
     virtual void visitIf(If* stmt) = 0;
     virtual void visitReturn(Return* stmt) = 0;
     virtual void visitCallStatement(CallStatement* stmt) = 0;
@@ -348,7 +357,7 @@ public:
     void visitIntLit(IntLit* expr) override;
     void visitStringLit(StringLit* expr) override;
 
-    void visitScope(Scope* stmt) override;
+    void visitCompound(Compound* stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
@@ -364,7 +373,7 @@ public:
     void visitIdExpression(IdExpression* expr) override;
     void visitBinaryExpression(BinaryExpression* expr) override;
 
-    void visitScope(Scope* stmt) override;
+    void visitCompound(Compound* stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
@@ -378,6 +387,29 @@ private:
     std::stack<std::optional<int>> stack;
 };
 
+class CountVarDeclVisitor : public Visitor {
+public:
+    CountVarDeclVisitor();
+    void visitIntLit(IntLit* expr) override;
+    void visitStringLit(StringLit* expr) override;
+    void visitIdExpression(IdExpression* expr) override;
+    void visitBinaryExpression(BinaryExpression* expr) override;
+
+    void visitCompound(Compound *stmt) override;
+    void visitIf(If* stmt) override;
+    void visitReturn(Return* stmt) override;
+    void visitCallStatement(CallStatement* stmt) override;
+    void visitVarAssignment(VarAssignment* stmt) override;
+
+    void visitVarDeclaration(VarDeclaration* decl) override;
+    void visitFunctionDefinition(FunctionDefinition* def) override;
+    void visitProgram(Program* prog) override;
+
+    int getNumVarDecls();
+private:
+    int varDecls = 0;
+};
+
 class CodeGenVisitor : public Visitor {
 public:
     void visitIntLit(IntLit* expr) override;
@@ -385,7 +417,7 @@ public:
     void visitIdExpression(IdExpression* expr) override;
     void visitBinaryExpression(BinaryExpression* expr) override;
 
-    void visitScope(Scope *stmt) override;
+    void visitCompound(Compound *stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
@@ -405,6 +437,8 @@ private:
 
     std::vector<OpCode*> dataSegment;
     std::vector<OpCode*> textSegment;
+
+
 
     int stringIndex = 0;
 };

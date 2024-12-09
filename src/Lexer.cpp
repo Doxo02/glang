@@ -1,11 +1,14 @@
 #include "Lexer.hpp"
 #include <iostream>
+#include <ostream>
 
 Lexer::Lexer() {}
 Lexer::~Lexer() {}
 
 void Lexer::passLine(std::string line, unsigned int number) {
     if(line == "") return;
+    //std::cout << line << std::endl;
+    //printTokens();
     bool commentFound = false;
     for(int i = 0; i < line.size(); i++) {
         if(commentFound) break;
@@ -25,7 +28,7 @@ void Lexer::passLine(std::string line, unsigned int number) {
                 c = line.at(i);
             }
             i--;
-
+            
             tokens.push_back(Token{TokType::IDENTIFIER, number, {}, buf});
         } else if(c == '"') {
             std::string buf;
