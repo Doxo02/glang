@@ -74,6 +74,7 @@ Statement* Parser::parseStatement() {
 
         consume(RCURLY);
 
+        statements.push_back(new EndCompound());
         return new Compound(statements);
     } else if(peek().type == IDENTIFIER) {
         std::string id = consumeString().value();
@@ -87,10 +88,27 @@ Statement* Parser::parseStatement() {
             return new Return(expr);
         } else if(id == "let") {
             Identifier id{consumeString().value()};
-            consume(COLON);
+            if(!consume(COLON)) {
+                std::cout << "Ya messed up bitch!" << std::endl;
+                exit(EXIT_FAILURE);
+            }
             TypeIdentifier type = TypeIdentifier{strToTypeId(consumeString().value())};
-            consume(SEMI);
-            return new VarDeclaration(id, type);
+            if(peek().type == SEMI) {
+                consume(SEMI);
+                return new VarDeclaration(id, type);
+            } else {
+                if(!consume(ASSIGN)) {
+                    std::cout << "Ya messed up bitch!" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                Expression* expr = parseExpression(findNext(SEMI, tokens.size()));
+                if(!consume(SEMI)) {
+                    std::cout << "Ya messed up bitch!" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+
+                return new VarDeclAssign(Identifier{id}, type, expr);
+            }
         } else {  
             if(peek().type == LPAREN) {
                 consume(LPAREN);

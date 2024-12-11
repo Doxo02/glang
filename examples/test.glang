@@ -1,14 +1,13 @@
 // argc: i32, argv: char** 
 
-let x: i32;
-let y: i32;
 
 fn main() -> i32 {
-    let test: i32;
-    syscall(1, 0, "Hello World!\ntest", 18, 0, 0, 0);
-    return 0;
+    let size: i32 = 20;
+    let returnValue: i32 = 2;
+    syscall(1, 0, "Hello World!\ntest\n", size, 0, 0, 0);
+    return returnValue;
 }
 
-fn add() -> i32 {
-    return 0;
-}
+//fn add() -> i32 {
+//    return 0;
+//}

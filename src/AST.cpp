@@ -1,7 +1,7 @@
 #include "AST.hpp"
 #include "OpCode.hpp"
 
-#include <algorithm>
+#include <cstddef>
 #include <iostream>
 #include <stack>
 #include <string>
@@ -32,6 +32,10 @@ void Compound::accept(Visitor* visitor) {
     }
 }
 
+void EndCompound::accept(Visitor* visitor) {
+    visitor->visitEndCompound(this);
+}
+
 void Return::accept(Visitor* visitor) {
     value->accept(visitor);
     visitor->visitReturn(this);
@@ -53,6 +57,11 @@ void VarDeclaration::accept(Visitor* visitor) {
     visitor->visitVarDeclaration(this);
 }
 
+void VarDeclAssign::accept(Visitor* visitor) {
+    value->accept(visitor);
+    visitor->visitVarDeclAssign(this);
+}
+
 void FunctionDefinition::accept(Visitor* visitor) {
     visitor->visitFunctionDefinition(this);
     body->accept(visitor);
@@ -66,40 +75,6 @@ void Program::accept(Visitor* visitor) {
         def->accept(visitor);
     }
     visitor->visitProgram(this);
-}
-
-// PrintVisitor implementation
-
-void PrintVisitor::visitIntLit(IntLit* expr) {
-    std::cout << "Visiting IntLit..." << std::endl;
-}
-
-void PrintVisitor::visitStringLit(StringLit* expr) {
-    std::cout << "Visiting StringLit..." << std::endl;
-}
-
-void PrintVisitor::visitCompound(Compound* stmt) {
-    std::cout << "Visiting Compound..." << std::endl;
-}
-
-void PrintVisitor::visitCallStatement(CallStatement* stmt) {
-    std::cout << "Visiting CallStatement..." << std::endl;
-}
-
-void PrintVisitor::visitFunctionDefinition(FunctionDefinition* def) {
-    std::cout << "Visiting FunctionDefinition..." << std::endl;
-}
-
-void PrintVisitor::visitIf(If* stmt) {
-    std::cout << "Visiting If..." << std::endl;
-}
-
-void PrintVisitor::visitProgram(Program* prog) {
-    std::cout << "Visiting Program..." << std::endl;
-}
-
-void PrintVisitor::visitReturn(Return* stmt) {
-    std::cout << "Visiting Return..." << std::endl;
 }
 
 // ConstExprVisitor implementation
@@ -143,7 +118,7 @@ void ConstExprVisitor::visitBinaryExpression(BinaryExpression* expr) {
 }
 
 void ConstExprVisitor::visitCompound(Compound* stmt) {}
-
+void ConstExprVisitor::visitEndCompound(EndCompound* stmt) {}
 void ConstExprVisitor::visitIf(If* stmt) {}
 
 void ConstExprVisitor::visitReturn(Return* stmt) {
@@ -167,6 +142,11 @@ void ConstExprVisitor::visitVarAssignment(VarAssignment *stmt) {
 
 void ConstExprVisitor::visitVarDeclaration(VarDeclaration *decl) {}
 
+void ConstExprVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
+    if(stack.top().has_value()) stmt->value = new IntLit(stack.top().value());
+    stack.pop();
+}
+
 void ConstExprVisitor::visitFunctionDefinition(FunctionDefinition *def) {}
 
 void ConstExprVisitor::visitProgram(Program* prog) {}
@@ -183,12 +163,17 @@ void CountVarDeclVisitor::visitIdExpression(IdExpression* expr) {}
 void CountVarDeclVisitor::visitBinaryExpression(BinaryExpression* expr) {}
 
 void CountVarDeclVisitor::visitCompound(Compound* stmt) {}
+void CountVarDeclVisitor::visitEndCompound(EndCompound* stmt) {}
 void CountVarDeclVisitor::visitIf(If* stmt) {}
 void CountVarDeclVisitor::visitReturn(Return* stmt) {}
 void CountVarDeclVisitor::visitCallStatement(CallStatement* stmt) {}
 void CountVarDeclVisitor::visitVarAssignment(VarAssignment* stmt) {}
 
 void CountVarDeclVisitor::visitVarDeclaration(VarDeclaration* stmt) {
+    varDecls++;
+}
+
+void CountVarDeclVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
     varDecls++;
 }
 
@@ -201,116 +186,107 @@ int CountVarDeclVisitor::getNumVarDecls() {
 
 // CodeGenVisitor implementation
 
+CodeGenVisitor::CodeGenVisitor() {
+    root = new Scope(nullptr);
+    current = root;
+}
+
 void CodeGenVisitor::visitIntLit(IntLit* expr) {
-    stack.push(std::to_string(expr->value));
+    push("qword " + std::to_string(expr->value), 8);
 }
 
 void CodeGenVisitor::visitStringLit(StringLit* expr) {
     DefineString* code = new DefineString(expr->value, stringIndex++);
 
     dataSegment.push_back(code);
-    stack.push(code->getId());
+    push(code->getId(), 8);
 }
 
 void CodeGenVisitor::visitIdExpression(IdExpression* expr) {
-    stack.push("[" + expr->id.name + "]");
+    Var var = current->getVar(expr->id);
+    push("qword [rsp + " + std::to_string(offset - var.offset) + "]", 8);
 }
 
 void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr) {
-    textSegment.push_back(new Move("r11", stack.top()));
-    stack.pop();
+    pop("rax", 8);
+    pop("rbx", 8);
     if(expr->op == BinaryOperator::PLUS) {
-        textSegment.push_back(new Add("r11", stack.top()));
+        textSegment.push_back(new Add("rax", "rbx"));
     } else if(expr->op == BinaryOperator::MINUS) {
-        textSegment.push_back(new Sub("r11", stack.top()));
+        textSegment.push_back(new Sub("rax", "rbx"));
     } else if(expr->op == BinaryOperator::MUL) {
-        textSegment.push_back(new Multiply("r11", stack.top()));
+        textSegment.push_back(new Multiply("rax", "rbx"));
     } else if(expr->op == BinaryOperator::DIV) {
-        textSegment.push_back(new Div("r11", stack.top()));
+        textSegment.push_back(new Div("rax", "rbx"));
     }
-    stack.pop();
-
-    stack.push("r11");
+    push("rax", 8);
 }
 
 void CodeGenVisitor::visitCompound(Compound* stmt) {
-    textSegment.push_back(new Push("rbp"));
-    textSegment.push_back(new Move("rbp", "rsp"));
-    CountVarDeclVisitor* visitor = new CountVarDeclVisitor();
-    stmt->accept(visitor);
-    textSegment.push_back(new Sub("rsp", std::to_string(visitor->getNumVarDecls() * 8)));
+    // CountVarDeclVisitor* visitor = new CountVarDeclVisitor();
+    // stmt->accept(visitor);
+    // textSegment.push_back(new Sub("rsp", std::to_string(visitor->getNumVarDecls() * 8)));
+    current = new Scope(current);
+}
+
+void CodeGenVisitor::visitEndCompound(EndCompound* stmt) {
+    current = current->getParent();
 }
 
 void CodeGenVisitor::visitIf(If* stmt) {}
 
 void CodeGenVisitor::visitReturn(Return* stmt) {
+    pop("rax", 8);
     textSegment.push_back(new Move("rsp", "rbp"));
     textSegment.push_back(new Pop("rbp"));
-    textSegment.push_back(new Move("rax", stack.top()));
+    offset = 0;
     textSegment.push_back(new ReturnOp());
+
+    offset = stack.top();
     stack.pop();
 }
 
 void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {
-    std::vector<std::string> args;
-
-    for(int i = 0; i < stmt->arguments.size(); i++) {
-        args.push_back(stack.top());
-        stack.pop();
-    }
-
-    std::reverse(args.begin(), args.end());
-
     if(stmt->id.name == "syscall") {
-        textSegment.push_back(new Move("rax", args.at(0)));
-        textSegment.push_back(new Move("rdi", args.at(1)));
-        textSegment.push_back(new Move("rsi", args.at(2)));
-        textSegment.push_back(new Move("rdx", args.at(3)));
-        textSegment.push_back(new Move("r10", args.at(4)));
-        textSegment.push_back(new Move("r8", args.at(5)));
-        textSegment.push_back(new Move("r9", args.at(6)));
+        pop("r9", 8);
+        pop("r8", 8);
+        pop("r10", 8);
+        pop("rdx", 8);
+        pop("rsi", 8);
+        pop("rdi", 8);
+        pop("rax", 8);
 
         textSegment.push_back(new Syscall());
     }
 }
 
 void CodeGenVisitor::visitVarAssignment(VarAssignment *stmt) {
-    std::string val = stack.top();
-    stack.pop();
-
-    textSegment.push_back(new Move("dword [" + stmt->id.name + "]", val));
+    Var var = current->getVar(stmt->id);
+    pop("rax", 8);
+    textSegment.push_back(new Move("[rsp + " + std::to_string(offset - var.offset) + "]", "rax"));
 }
 
 void CodeGenVisitor::visitVarDeclaration(VarDeclaration* decl) {
-    switch(decl->type.type) {
-        case TypeIdentifierType::I8:
-            dataSegment.push_back(new DefineVar(decl->id.name, "db"));
-            break;
-        case TypeIdentifierType::I16:
-            dataSegment.push_back(new DefineVar(decl->id.name, "dw"));
-            break;
-        case TypeIdentifierType::I32:
-            dataSegment.push_back(new DefineVar(decl->id.name, "dd"));
-            break;
-        case TypeIdentifierType::I64:
-            dataSegment.push_back(new DefineVar(decl->id.name, "dq"));
-            break;
-        case TypeIdentifierType::VOID:
-        case TypeIdentifierType::CHAR:
-        case TypeIdentifierType::F32:
-        case TypeIdentifierType::F64:
-        case TypeIdentifierType::BOOL:
-          break;
-        }
+    push("qword 0", 8);
+    current->addVar(decl->id, Var{offset, decl->type.type});
+}
+
+void CodeGenVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
+    current->addVar(stmt->id, Var{offset, stmt->type.type});
 }
 
 void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {
     textSegment.push_back(new Label(def->id.name));
+    textSegment.push_back(new Push("rbp"));
+    textSegment.push_back(new Move("rbp", "rsp"));
+
+    stack.push(offset);
+    offset = 0;
 }
 
 void CodeGenVisitor::visitProgram(Program* prog) {}
 
-std::stack<std::string> CodeGenVisitor::getStack() {
+std::stack<size_t> CodeGenVisitor::getStack() {
     return stack;
 }
 
@@ -320,4 +296,14 @@ std::vector<OpCode*> CodeGenVisitor::getDataSegment() {
 
 std::vector<OpCode*> CodeGenVisitor::getTextSegment() {
     return textSegment;
+}
+
+void CodeGenVisitor::push(std::string what, size_t bytes) {
+    textSegment.push_back(new Push(what));
+    offset += bytes;
+}
+
+void CodeGenVisitor::pop(std::string where, size_t bytes) {
+    textSegment.push_back(new Pop(where));
+    offset -= bytes;
 }

@@ -2,6 +2,27 @@
 #define OPCODE_HPP
 
 #include <string>
+#include <iostream>
+inline void replaceAll(std::string& source, const std::string& from, const std::string& to)
+{
+    std::string newString;
+    newString.reserve(source.length());  // avoids a few memory allocations
+
+    std::string::size_type lastPos = 0;
+    std::string::size_type findPos;
+
+    while(std::string::npos != (findPos = source.find(from, lastPos)))
+    {
+        newString.append(source, lastPos, findPos - lastPos);
+        newString += to;
+        lastPos = findPos + from.length();
+    }
+
+    // Care for the rest after last occurrence
+    newString += source.substr(lastPos);
+
+    source.swap(newString);
+}
 
 class OpCode {
 public:
@@ -185,10 +206,11 @@ public:
     }
 
     std::string genNasm() override {
+        replaceAll(toDefine, "\\n", "\", 0xA, 0xD, \"");
         std::string out = "\t";
         out.append(id);
         out.append(": db \"");
-        out.append(toDefine.replace(toDefine.find("\\n"), 2, "\", 0xA, 0xD, \""));
+        out.append(toDefine);
         out.append("\", 0");
         return out;
     }

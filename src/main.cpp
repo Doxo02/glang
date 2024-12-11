@@ -66,7 +66,6 @@ int main(int argc, char** argv) {
     for(auto d : data) {
         outFile << d->genNasm() << std::endl;
     }
-    
 
     return 0;
 }

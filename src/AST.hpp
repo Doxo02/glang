@@ -1,6 +1,7 @@
 #ifndef AST_HPP
 #define AST_HPP
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -185,6 +186,17 @@ public:
     std::vector<Statement*> statements;
 };
 
+class EndCompound : public Statement {
+public:
+    EndCompound() {}
+
+    std::string toString(int indentLevel) override {
+        return "EndCompound\n";
+    }
+
+    void accept(Visitor* visitor) override;
+};
+
 class If : Statement {
 public:
     Expression* condition;
@@ -281,6 +293,32 @@ public:
     TypeIdentifier type;
 };
 
+class VarDeclAssign : public Statement {
+public:
+    VarDeclAssign(Identifier id, TypeIdentifier type, Expression* value) {
+        this->id = id;
+        this->type = type;
+        this->value = value;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out = "";
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append(id.name);
+        out.append(": ");
+        out.append(typeIdentifierTypeToString(type.type));
+        out.append(" =\n");
+        out.append(value->toString(indentLevel + 1));
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    Identifier id;
+    TypeIdentifier type;
+    Expression* value;
+};
+
 class FunctionDefinition {
 public:
     FunctionDefinition(Identifier id, Statement* body, TypeIdentifier returnType, std::map<Identifier, TypeIdentifier> args) {
@@ -334,6 +372,38 @@ public:
     std::vector<FunctionDefinition*> functions;
 };
 
+struct Var {
+    size_t offset;
+    TypeIdentifierType type;
+};
+
+class Scope {
+public:
+    Scope(Scope* parent) {
+        this->parent = parent;
+    }
+
+    Scope* getParent() {
+        return parent;
+    }
+
+    void addVar(Identifier id, Var info) {
+        vars.insert({id.name, info});
+    }
+
+    Var getVar(Identifier id) {
+        if(vars.find(id.name) == vars.cend()) {
+            return parent->getVar(id);
+        }
+
+        return vars.find(id.name)->second;
+    }
+
+private:
+    Scope* parent;
+    std::map<std::string, Var> vars;
+};
+
 class Visitor {
 public:
     virtual void visitIntLit(IntLit* expr) = 0;
@@ -342,28 +412,16 @@ public:
     virtual void visitBinaryExpression(BinaryExpression* expr) = 0;
 
     virtual void visitCompound(Compound* stmt) = 0;
+    virtual void visitEndCompound(EndCompound* stmt) = 0;
     virtual void visitIf(If* stmt) = 0;
     virtual void visitReturn(Return* stmt) = 0;
     virtual void visitCallStatement(CallStatement* stmt) = 0;
     virtual void visitVarAssignment(VarAssignment* stmt) = 0;
+    virtual void visitVarDeclaration(VarDeclaration* stmt) = 0;
+    virtual void visitVarDeclAssign(VarDeclAssign* stmt) = 0;
 
-    virtual void visitVarDeclaration(VarDeclaration* decl) = 0;
     virtual void visitFunctionDefinition(FunctionDefinition* def) = 0;
     virtual void visitProgram(Program* prog) = 0;
-};
-
-class PrintVisitor : public Visitor {
-public:
-    void visitIntLit(IntLit* expr) override;
-    void visitStringLit(StringLit* expr) override;
-
-    void visitCompound(Compound* stmt) override;
-    void visitIf(If* stmt) override;
-    void visitReturn(Return* stmt) override;
-    void visitCallStatement(CallStatement* stmt) override;
-
-    void visitFunctionDefinition(FunctionDefinition* def) override;
-    void visitProgram(Program* prog) override;
 };
 
 class ConstExprVisitor : public Visitor {
@@ -374,12 +432,14 @@ public:
     void visitBinaryExpression(BinaryExpression* expr) override;
 
     void visitCompound(Compound* stmt) override;
+    void visitEndCompound(EndCompound* stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
     void visitVarAssignment(VarAssignment* stmt) override;
+    void visitVarDeclaration(VarDeclaration* stmt) override;
+    void visitVarDeclAssign(VarDeclAssign* stmt) override;
 
-    void visitVarDeclaration(VarDeclaration* decl) override;
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
 
@@ -396,12 +456,14 @@ public:
     void visitBinaryExpression(BinaryExpression* expr) override;
 
     void visitCompound(Compound *stmt) override;
+    void visitEndCompound(EndCompound* stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
     void visitVarAssignment(VarAssignment* stmt) override;
+    void visitVarDeclaration(VarDeclaration* stmt) override;
+    void visitVarDeclAssign(VarDeclAssign* stmt) override;
 
-    void visitVarDeclaration(VarDeclaration* decl) override;
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
 
@@ -412,35 +474,45 @@ private:
 
 class CodeGenVisitor : public Visitor {
 public:
+    CodeGenVisitor();
+
     void visitIntLit(IntLit* expr) override;
     void visitStringLit(StringLit* expr) override;
     void visitIdExpression(IdExpression* expr) override;
     void visitBinaryExpression(BinaryExpression* expr) override;
 
     void visitCompound(Compound *stmt) override;
+    void visitEndCompound(EndCompound* stmt) override;
     void visitIf(If* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
     void visitVarAssignment(VarAssignment* stmt) override;
+    void visitVarDeclaration(VarDeclaration* stmt) override;
+    void visitVarDeclAssign(VarDeclAssign* stmt) override;
 
-    void visitVarDeclaration(VarDeclaration* decl) override;
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
 
-    std::stack<std::string> getStack();
+    std::stack<size_t> getStack();
 
     std::vector<OpCode*> getDataSegment();
     std::vector<OpCode*> getTextSegment();
 
 private:
-    std::stack<std::string> stack;
+    void push(std::string what, size_t bytes);
+    void pop(std::string where, size_t bytes);
+
+    Scope* root;
+    Scope* current;
+
+    std::stack<size_t> stack;
 
     std::vector<OpCode*> dataSegment;
     std::vector<OpCode*> textSegment;
 
-
-
     int stringIndex = 0;
+
+    size_t offset = 0;
 };
 
 #endif
