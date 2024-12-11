@@ -36,7 +36,8 @@ struct Token {
     std::optional<int> intValue;
     std::optional<std::string> stringValue;
 
-    std::string toString() {
+    [[nodiscard]] std::string toString() const
+    {
         std::string out;
 
         switch (type)

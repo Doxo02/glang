@@ -2,7 +2,7 @@
 #define OPCODE_HPP
 
 #include <string>
-#include <iostream>
+
 inline void replaceAll(std::string& source, const std::string& from, const std::string& to)
 {
     std::string newString;
@@ -26,12 +26,13 @@ inline void replaceAll(std::string& source, const std::string& from, const std::
 
 class OpCode {
 public:
+    virtual ~OpCode() = default;
     virtual std::string genNasm() = 0;
 };
 
-class Label : public OpCode {
+class Label final : public OpCode {
 public:
-    Label(std::string name) {
+    explicit Label(const std::string& name) {
         this->name = name;
     }
 
@@ -46,9 +47,9 @@ private:
     std::string name;
 };
 
-class Push : public OpCode {
+class Push final : public OpCode {
 public:
-    Push(std::string reg) {
+    explicit Push(const std::string& reg) {
         this->reg = reg;
     }
 
@@ -62,9 +63,9 @@ private:
     std::string reg;
 };
 
-class Pop : public OpCode {
+class Pop final : public OpCode {
 public:
-    Pop(std::string reg) {
+    explicit Pop(const std::string& reg) {
         this->reg = reg;
     }
 
@@ -78,9 +79,9 @@ private:
     std::string reg;
 };
 
-class Move : public OpCode {
+class Move final : public OpCode {
 public:
-    Move(std::string first, std::string second) {
+    Move(const std::string& first, const std::string& second) {
         this->first = first;
         this->second = second;
     }
@@ -98,9 +99,9 @@ private:
     std::string second;
 };
 
-class Add : public OpCode {
+class Add final : public OpCode {
 public:
-    Add(std::string first, std::string second) {
+    Add(const std::string& first, const std::string& second) {
         this->first = first;
         this->second = second;
     }
@@ -118,9 +119,9 @@ private:
     std::string second;
 };
 
-class Sub : public OpCode {
+class Sub final : public OpCode {
 public:
-    Sub(std::string first, std::string second) {
+    Sub(const std::string& first, const std::string& second) {
         this->first = first;
         this->second = second;
     }
@@ -138,9 +139,9 @@ private:
     std::string second;
 };
 
-class Multiply : public OpCode {
+class Multiply final : public OpCode {
 public:
-    Multiply(std::string first, std::string second) {
+    Multiply(const std::string& first, const std::string& second) {
         this->first = first;
         this->second = second;
     }
@@ -158,9 +159,9 @@ private:
     std::string second;
 };
 
-class Div : public OpCode {
+class Div final : public OpCode {
 public:
-    Div(std::string first, std::string second) {
+    Div(const std::string& first, const std::string& second) {
         this->first = first;
         this->second = second;
     }
@@ -178,16 +179,16 @@ private:
     std::string second;
 };
 
-class Syscall : public OpCode {
+class Syscall final : public OpCode {
 public:
     std::string genNasm() override {
         return "\tsyscall";
     }
 };
 
-class Call : public OpCode {
+class Call final : public OpCode {
 public:
-    Call(std::string func) {
+    explicit Call(const std::string& func) {
         this->func = func;
     }
 
@@ -199,16 +200,16 @@ private:
     std::string func;
 };
 
-class ReturnOp : public OpCode {
+class ReturnOp final : public OpCode {
 public:
     std::string genNasm() override {
         return "\tret";
     }
 };
 
-class DefineString : public OpCode {
+class DefineString final : public OpCode {
 public:
-    DefineString(std::string toDefine, int index) {
+    DefineString(const std::string& toDefine, const int index) {
         this->toDefine = toDefine;
         this->index = index;
 
@@ -235,9 +236,9 @@ private:
     int index;
 };
 
-class DefineVar : public OpCode {
+class DefineVar final : public OpCode {
 public:
-    DefineVar(std::string id, std::string type) {
+    DefineVar(const std::string& id, const std::string& type) {
         this->id = id;
         this->type = type;
     }

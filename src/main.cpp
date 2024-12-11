@@ -37,11 +37,11 @@ int main(int argc, char** argv) {
     //ConstExprVisitor cVisitor;
     //program->accept(&cVisitor);
 
-    printParseTree(program);
+    //printParseTree(program);
 
     CodeGenVisitor visitor;
 
-    
+
     program->accept(&visitor);
 
     auto data = visitor.getDataSegment();
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 }
 
 void printParseTree(Program* program) {
-    for(FunctionDefinition* def : program->functions) {
+    for (FunctionDefinition* def : program->functions) {
         std::cout << def->toString(0) << std::endl;
     }
 }

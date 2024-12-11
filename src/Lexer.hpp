@@ -11,7 +11,7 @@ public:
     Lexer();
     ~Lexer();
 
-    void passLine(std::string line, unsigned int number);
+    void passLine(const std::string& line, unsigned int number);
     void printTokens();
     std::vector<Token> getTokens();
 

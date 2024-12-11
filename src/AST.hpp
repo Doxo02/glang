@@ -55,6 +55,7 @@ struct Identifier {
 
 class Expression {
 public:
+    virtual ~Expression() = default;
     virtual std::string toString(int indentLevel) = 0;
 
     virtual void accept(Visitor* visitor) = 0;
@@ -62,13 +63,13 @@ public:
     int derefDepth = 0;
 };
 
-class IntLit : public Expression {
+class IntLit final : public Expression {
 public:
-    IntLit(int value) {
+    explicit IntLit(const int value) {
         this->value = value;
     }
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("IntLit: ");
         out.append(std::to_string(value));
@@ -83,13 +84,13 @@ public:
     int value;
 };
 
-class StringLit : public Expression {
+class StringLit final : public Expression {
 public:
-    StringLit(std::string value) {
+    explicit StringLit(const std::string& value) {
         this->value = value;
     }
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("StringLit: ");
         out.append(value);
@@ -104,14 +105,14 @@ public:
     std::string value;
 };
 
-class IdExpression : public Expression {
+class IdExpression final : public Expression {
 public:
-    IdExpression(Identifier id) {
+    explicit IdExpression(const Identifier& id) {
         this->id = id;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("IdExpression: ");
         out.append(id.name);
@@ -126,16 +127,16 @@ public:
     Identifier id;
 };
 
-class BinaryExpression : public Expression {
+class BinaryExpression final : public Expression {
 public:
-    BinaryExpression(BinaryOperator op, Expression* left, Expression* right) {
+    BinaryExpression(const BinaryOperator op, Expression* left, Expression* right) {
         this->op = op;
         this->left = left;
         this->right = right;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         switch(op) {
             case BinaryOperator::PLUS:
@@ -172,13 +173,13 @@ public:
 
 class CallExpression : public Expression {
 public:
-    CallExpression(Identifier id, std::vector<Expression*> args) {
+    CallExpression(const Identifier& id, const std::vector<Expression*>& args) {
         this->id = id;
         this->args = args;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("CallExpression: ");
         out.append(id.name );
@@ -199,19 +200,20 @@ public:
 
 class Statement {
 public:
+    virtual ~Statement() = default;
     virtual std::string toString(int indentLevel) = 0;
 
     virtual void accept(Visitor* visitor) = 0;
 };
 
-class Compound : public Statement {
+class Compound final : public Statement {
 public:
-    Compound(std::vector<Statement*> statements) {
+    explicit Compound(const std::vector<Statement*>& statements) {
         this->statements = statements;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("Compound\n");
 
@@ -228,9 +230,9 @@ public:
     std::vector<Statement*> statements;
 };
 
-class EndCompound : public Statement {
+class EndCompound final : public Statement {
 public:
-    EndCompound() {}
+    EndCompound() = default;
 
     std::string toString(int indentLevel) override {
         return "EndCompound\n";
@@ -245,14 +247,14 @@ public:
     Statement* body;
 };
 
-class Return : public Statement {
+class Return final : public Statement {
 public:
-    Return(Expression* value) {
+    explicit Return(Expression* value) {
         this->value = value;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("Return:\n");
         if(value != nullptr) out.append(value->toString(indentLevel + 1));
@@ -265,14 +267,14 @@ public:
     Expression* value;
 };
 
-class CallStatement : public Statement {
+class CallStatement final : public Statement {
 public:
-    CallStatement(Identifier id, std::vector<Expression*> arguments) {
+    CallStatement(const Identifier& id, const std::vector<Expression*>& arguments) {
         this->id = id;
         this->arguments = arguments;
     }
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("CallStatement: ");
         out.append(id.name );
@@ -291,15 +293,15 @@ public:
     std::vector<Expression*> arguments;
 };
 
-class VarAssignment : public Statement {
+class VarAssignment final : public Statement {
 public:
-    VarAssignment(Identifier id, Expression* value) {
+    VarAssignment(const Identifier& id, Expression* value) {
         this->id = id;
         this->value = value;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append(id.name);
         out.append(" = ");
@@ -313,15 +315,15 @@ public:
     Expression* value;
 };
 
-class VarDeclaration : public Statement {
+class VarDeclaration final : public Statement {
 public:
-    VarDeclaration(Identifier id, TypeIdentifier type) {
+    VarDeclaration(const Identifier& id, const TypeIdentifier type) {
         this->id = id;
         this->type = type;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append(id.name);
         out.append(": ");
@@ -338,16 +340,16 @@ public:
     TypeIdentifier type;
 };
 
-class VarDeclAssign : public Statement {
+class VarDeclAssign final : public Statement {
 public:
-    VarDeclAssign(Identifier id, TypeIdentifier type, Expression* value) {
+    VarDeclAssign(const Identifier& id, const TypeIdentifier type, Expression* value) {
         this->id = id;
         this->type = type;
         this->value = value;
     }
 
-    std::string toString(int indentLevel) override {
-        std::string out = "";
+    std::string toString(const int indentLevel) override {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append(id.name);
         out.append(": ");
@@ -374,15 +376,16 @@ public:
         int index;
     };
 
-    FunctionDefinition(Identifier id, Statement* body, TypeIdentifier returnType, std::map<std::string, ParamData> args) {
+    FunctionDefinition(const Identifier& id, Statement* body, const TypeIdentifier returnType, const std::map<std::string, ParamData>& args) {
         this->id = id;
         this->body = body;
         this->returnType = returnType;
         this->args = args;
     }
 
-    std::string toString(int indentLevel) {
-        std::string out = "";
+    [[nodiscard]] std::string toString(const int indentLevel) const
+    {
+        std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("Function: ");
         out.append(id.name);
@@ -397,13 +400,13 @@ public:
 
         for(int i = 0; i < indentLevel+1; i++) out.append("  ");
         out.append("Args:\n");
-        for(auto pair : args) {
+        for(const auto& [name, data] : args) {
             for(int i = 0; i < indentLevel+2; i++) out.append("  ");
-            out.append(pair.first);
+            out.append(name);
             out.append(": ");
-            out.append(typeIdentifierTypeToString(pair.second.type.type));
+            out.append(typeIdentifierTypeToString(data.type.type));
             out.append("(");
-            out.append(std::to_string(pair.second.type.ptrDepth));
+            out.append(std::to_string(data.type.ptrDepth));
             out.append(")");
             out.append("\n");
         }
@@ -438,19 +441,20 @@ struct Var {
 
 class Scope {
 public:
-    Scope(Scope* parent) {
+    explicit Scope(Scope* parent) {
         this->parent = parent;
     }
 
-    Scope* getParent() {
+    [[nodiscard]] Scope* getParent() const
+    {
         return parent;
     }
 
-    void addVar(Identifier id, Var info) {
+    void addVar(const Identifier& id, Var info) {
         vars.insert({id.name, info});
     }
 
-    Var getVar(Identifier id) {
+    Var getVar(const Identifier& id) {
         if(vars.find(id.name) == vars.cend()) {
             return parent->getVar(id);
         }
@@ -465,6 +469,7 @@ private:
 
 class Visitor {
 public:
+    virtual ~Visitor() = default;
     virtual void visitIntLit(IntLit* expr) = 0;
     virtual void visitStringLit(StringLit* expr) = 0;
     virtual void visitIdExpression(IdExpression* expr) = 0;
@@ -527,12 +532,12 @@ public:
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
 
-    int getNumVarDecls();
+    [[nodiscard]] int getNumVarDecls() const;
 private:
     int varDecls = 0;
 };
 
-class CodeGenVisitor : public Visitor {
+class CodeGenVisitor final : public Visitor {
 public:
     CodeGenVisitor();
 
@@ -560,8 +565,8 @@ public:
     std::vector<OpCode*> getTextSegment();
 
 private:
-    void push(std::string what, size_t bytes);
-    void pop(std::string where, size_t bytes);
+    void push(const std::string& what, size_t bytes);
+    void pop(const std::string& where, size_t bytes);
 
     Scope* root;
     Scope* current;

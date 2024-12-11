@@ -3,11 +3,11 @@
 #include <iostream>
 #include <ostream>
 
-Lexer::Lexer() {}
-Lexer::~Lexer() {}
+Lexer::Lexer() = default;
+Lexer::~Lexer() = default;
 
-void Lexer::passLine(std::string line, unsigned int number) {
-    if(line == "") return;
+void Lexer::passLine(const std::string& line, const unsigned int number) {
+    if(line.empty()) return;
     //std::cout << line << std::endl;
     //printTokens();
     bool commentFound = false;
@@ -122,6 +122,9 @@ void Lexer::passLine(std::string line, unsigned int number) {
                         i++;
                     } else
                         tokens.push_back(Token{LESS, number});
+                default:
+                    std::cerr << "Unknown token type: " << line.at(i) << std::endl;
+                    exit(EXIT_FAILURE);
             }
         }
     }
