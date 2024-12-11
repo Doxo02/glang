@@ -20,6 +20,7 @@ private:
 
     Statement* parseStatement();
     std::vector<Expression*> parseArgs(int until);
+    std::map<std::string, TypeIdentifier> parseParameters();
 
     Expression* parseExpression(int until);
     Expression* parseParen(int until);

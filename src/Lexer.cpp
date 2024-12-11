@@ -1,4 +1,5 @@
 #include "Lexer.hpp"
+#include "Token.hpp"
 #include <iostream>
 #include <ostream>
 
@@ -88,13 +89,13 @@ void Lexer::passLine(std::string line, unsigned int number) {
                     if(line.at(i+1) == '/')
                         commentFound = true;
                     else
-                        tokens.push_back(Token{DIV});
+                        tokens.push_back(Token{FSLASH});
                     break;
                 case '+':
                     tokens.push_back(Token{PLUS});
                     break;
                 case '*':
-                    tokens.push_back(Token{MUL});
+                    tokens.push_back(Token{STAR});
                     break;
                 case ',':
                     tokens.push_back(Token{COMMA});

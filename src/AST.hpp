@@ -46,6 +46,7 @@ inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
 
 struct TypeIdentifier {
     TypeIdentifierType type;
+    int ptrDepth = 0;
 };
 
 struct Identifier {
@@ -284,6 +285,9 @@ public:
         out.append(id.name);
         out.append(": ");
         out.append(typeIdentifierTypeToString(type.type));
+        out.append("(");
+        out.append(std::to_string(type.ptrDepth));
+        out.append(")");
         return out;
     }
 
@@ -307,6 +311,9 @@ public:
         out.append(id.name);
         out.append(": ");
         out.append(typeIdentifierTypeToString(type.type));
+        out.append("(");
+        out.append(std::to_string(type.ptrDepth));
+        out.append(")");
         out.append(" =\n");
         out.append(value->toString(indentLevel + 1));
         return out;
@@ -321,7 +328,7 @@ public:
 
 class FunctionDefinition {
 public:
-    FunctionDefinition(Identifier id, Statement* body, TypeIdentifier returnType, std::map<Identifier, TypeIdentifier> args) {
+    FunctionDefinition(Identifier id, Statement* body, TypeIdentifier returnType, std::map<std::string, TypeIdentifier> args) {
         this->id = id;
         this->body = body;
         this->returnType = returnType;
@@ -337,15 +344,21 @@ public:
         for(int i = 0; i < indentLevel+1; i++) out.append("  ");
         out.append("ReturnType: ");
         out.append(typeIdentifierTypeToString(returnType.type));
+        out.append("(");
+        out.append(std::to_string(returnType.ptrDepth));
+        out.append(")");
         out.append("\n");
 
         for(int i = 0; i < indentLevel+1; i++) out.append("  ");
         out.append("Args:\n");
         for(auto pair : args) {
             for(int i = 0; i < indentLevel+2; i++) out.append("  ");
-            out.append(pair.first.name);
+            out.append(pair.first);
             out.append(": ");
             out.append(typeIdentifierTypeToString(pair.second.type));
+            out.append("(");
+            out.append(std::to_string(pair.second.ptrDepth));
+            out.append(")");
             out.append("\n");
         }
 
@@ -361,7 +374,7 @@ public:
     Identifier id;
     Statement* body;
     TypeIdentifier returnType;
-    std::map<Identifier, TypeIdentifier> args;
+    std::map<std::string, TypeIdentifier> args;
 };
 
 class Program {

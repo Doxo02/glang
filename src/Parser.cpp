@@ -10,6 +10,41 @@ Parser::Parser(std::vector<Token> tokens) {
     this->tokens = tokens;
 }
 
+std::map<std::string, TypeIdentifier> Parser::parseParameters() {
+    std::map<std::string, TypeIdentifier> args;
+
+    while(peek().type != RPAREN) {
+        if(peek().type != IDENTIFIER) {
+            std::cout << "Ya messed up bitch!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        std::string id = consumeString().value();
+        if(!consume(COLON)) {
+            std::cout << "Ya messed up bitch!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        if(peek().type != IDENTIFIER) {
+            std::cout << "Ya messed up bitch!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        TypeIdentifierType t = strToTypeId(consumeString().value());
+        int ptrDepth = 0;
+        while(peek().type == STAR) {
+            consume(STAR);
+            ptrDepth++;
+        }
+        args.insert({id, TypeIdentifier{t, ptrDepth}});
+        if(peek().type != RPAREN && !consume(COMMA)) {
+            std::cout << "Ya messed up bitch!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    consume(RPAREN);
+
+    return args;
+}
+
 Program* Parser::parse() {
     std::vector<FunctionDefinition*> defs;
     std::vector<VarDeclaration*> decls;
@@ -28,11 +63,7 @@ Program* Parser::parse() {
                 exit(EXIT_FAILURE);
             }
             
-            if(peek().type == RPAREN) {
-                consume(RPAREN);
-            } else {
-                // TODO: implement arg list
-            }
+            auto args = parseParameters();
 
             if(!consume(RARROW)) {
                 std::cout << "Ya messed up bitch!" << std::endl;
@@ -51,7 +82,7 @@ Program* Parser::parse() {
 
             Statement* body = parseStatement();
 
-            defs.push_back(new FunctionDefinition(id, body, type, {}));
+            defs.push_back(new FunctionDefinition(id, body, type, args));
         } else if(str == "let") {
             Identifier id{consumeString().value()};
             consume(COLON);
@@ -92,7 +123,14 @@ Statement* Parser::parseStatement() {
                 std::cout << "Ya messed up bitch!" << std::endl;
                 exit(EXIT_FAILURE);
             }
-            TypeIdentifier type = TypeIdentifier{strToTypeId(consumeString().value())};
+
+            std::string typeStr = consumeString().value();
+            int ptrDepth = 0;
+            while(peek().type == STAR) {
+                consume(STAR);
+                ptrDepth++;
+            }
+            TypeIdentifier type = TypeIdentifier{strToTypeId(typeStr), ptrDepth};
             if(peek().type == SEMI) {
                 consume(SEMI);
                 return new VarDeclaration(id, type);
@@ -183,8 +221,8 @@ Expression* Parser::parseAddSub(int until) {
 }
 
 Expression* Parser::parseMulDiv(int until) {
-    int nextMul = findNextOutsideParen(MUL, until);
-    int nextDiv = findNextOutsideParen(DIV, until);
+    int nextMul = findNextOutsideParen(STAR, until);
+    int nextDiv = findNextOutsideParen(FSLASH, until);
 
     if(nextMul == -1 && nextDiv == -1) return parseParen(until);
 
@@ -199,8 +237,8 @@ Expression* Parser::parseMulDiv(int until) {
     }
 
     Expression* left = parseParen(next);
-    if(op == BinaryOperator::MUL) consume(MUL);
-    else if(op == BinaryOperator::DIV) consume(DIV);
+    if(op == BinaryOperator::MUL) consume(STAR);
+    else if(op == BinaryOperator::DIV) consume(FSLASH);
     Expression* right = parseMulDiv(until);
 
     return new BinaryExpression(op, left, right);

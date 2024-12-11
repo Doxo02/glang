@@ -18,8 +18,8 @@ enum TokType {
     RARROW,
     PLUS,
     MINUS,
-    MUL,
-    DIV,
+    STAR,
+    FSLASH,
     COMMA,
     ASSIGN,
     COLON,
@@ -80,11 +80,11 @@ struct Token {
         case MINUS:
             out.append("MINUS");
             break;
-        case MUL:
-            out.append("MUL");
+        case STAR:
+            out.append("STAR");
             break;
-        case DIV:
-            out.append("DIV");
+        case FSLASH:
+            out.append("FSLASH");
             break;
         case COMMA:
             out.append("COMMA");
