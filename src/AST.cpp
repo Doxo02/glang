@@ -66,6 +66,11 @@ void VarDeclAssign::accept(Visitor* visitor) {
     visitor->visitVarDeclAssign(this);
 }
 
+void While::accept(Visitor* visitor)
+{
+    visitor->visitWhile(this);
+}
+
 void FunctionDefinition::accept(Visitor* visitor) {
     visitor->visitFunctionDefinition(this);
     body->accept(visitor);
@@ -190,6 +195,16 @@ int CountVarDeclVisitor::getNumVarDecls() const {
 
 // CodeGenVisitor implementation
 
+void CodeGenVisitor::push(const std::string& what, const size_t bytes = 8) {
+    textSegment.push_back(new Push(what));
+    offset += bytes;
+}
+
+void CodeGenVisitor::pop(const std::string& where, const size_t bytes = 8) {
+    textSegment.push_back(new Pop(where));
+    offset -= bytes;
+}
+
 CodeGenVisitor::CodeGenVisitor() {
     root = new Scope(nullptr);
     current = root;
@@ -248,6 +263,9 @@ void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr) {
         textSegment.push_back(new Multiply("rax", "rbx"));
     } else if(expr->op == BinaryOperator::DIV) {
         textSegment.push_back(new Div("rax", "rbx"));
+    } else if (expr->op == BinaryOperator::NEQUALS)
+    {
+        textSegment.push_back(new NotEqual("rbx", "rax"));
     }
     std::string toPush;
     for(int i = 0; i < expr->derefDepth; i++) toPush.append("[");
@@ -336,6 +354,19 @@ void CodeGenVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
     current->addVar(stmt->id, Var{offset, stmt->type});
 }
 
+void CodeGenVisitor::visitWhile(While* stmt)
+{
+    int i = whileIndex++;
+    textSegment.push_back(new Label("while" + std::to_string(i) + "_start"));
+    stmt->condition->accept(this);
+    pop("rax");
+    textSegment.push_back(new Compare("rax", "0"));
+    textSegment.push_back(new Jump("je", "while" + std::to_string(i) + "_end"));
+    stmt->body->accept(this);
+    textSegment.push_back(new Jump("jmp", "while" + std::to_string(i) + "_start"));
+    textSegment.push_back(new Label("while" + std::to_string(i) + "_end"));
+}
+
 void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {
     textSegment.push_back(new Label(def->id.name));
     textSegment.push_back(new Push("rbp"));
@@ -361,14 +392,4 @@ std::vector<OpCode*> CodeGenVisitor::getDataSegment() {
 
 std::vector<OpCode*> CodeGenVisitor::getTextSegment() {
     return textSegment;
-}
-
-void CodeGenVisitor::push(const std::string& what, const size_t bytes = 8) {
-    textSegment.push_back(new Push(what));
-    offset += bytes;
-}
-
-void CodeGenVisitor::pop(const std::string& where, size_t bytes = 8) {
-    textSegment.push_back(new Pop(where));
-    offset -= bytes;
 }

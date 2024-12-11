@@ -27,6 +27,7 @@ private:
     Expression* parseParen(int until);
     Expression* parseAddSub(int until);
     Expression* parseMulDiv(int until);
+    Expression* parseCompares(int until);
     Expression* parseSingle();
 
     void consume(TokType type, const std::string& errorMsg);

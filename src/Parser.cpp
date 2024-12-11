@@ -1,4 +1,7 @@
 #include "Parser.hpp"
+
+#include <fstream>
+
 #include "AST.hpp"
 #include "Token.hpp"
 
@@ -7,6 +10,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <algorithm>
+
+#include "Lexer.hpp"
 
 Parser::Parser(std::vector<Token> tokens) {
     this->tokens = std::move(tokens);
@@ -78,6 +84,34 @@ Program* Parser::parse() {
             const auto type = TypeIdentifier{strToTypeId(consumeString().value())};
             consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
             decls.push_back(new VarDeclaration(id, type));
+        } else if (str == "import") {
+            consume(LPAREN, std::to_string(peek().line) + ": expected '(' but found: " + peek().toString());
+            if (peek().type != STRING_LITERAL) {
+                std::cerr << peek().line << ": expected STRING_LITERAL but found: " << peek().toString() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            std::string path = consumeString().value();
+            consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
+            consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
+            std::fstream file(path);
+            std::string line;
+            unsigned int number = 1;
+            Lexer lexer;
+            while(std::getline(file, line)) {
+                lexer.passLine(line, number++);
+            }
+            file.close();
+            Parser parser(lexer.getTokens());
+            Program* program = parser.parse();
+            for (FunctionDefinition* def : program->functions) {
+                defs.push_back(def);
+            }
+            for (VarDeclaration* decl : program->declarations) {
+                decls.push_back(decl);
+            }
+        } else {
+            std::cerr << peek().line << ": expected 'fn', 'let' or 'import' but found: " << peek().toString() << std::endl;
+            exit(EXIT_FAILURE);
         }
     }
     return new Program{decls, defs};
@@ -108,7 +142,8 @@ Statement* Parser::parseStatement(const bool funcBody) {
             Expression* expr = parseExpression(findNext(SEMI, static_cast<int>(tokens.size())));
             consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
             return new Return(expr);
-        } else if(id == "let") {
+        }
+        if(id == "let") {
             const Identifier identifier{consumeString().value()};
             consume(COLON, std::to_string(peek().line) + ": expected ':' but found: " + peek().toString());
 
@@ -134,22 +169,28 @@ Statement* Parser::parseStatement(const bool funcBody) {
 
                 return new VarDeclAssign(Identifier{identifier}, type, expr);
             }
-        } else {  
-            if(peek().type == LPAREN) {
-                consume(LPAREN, "");
-                const std::vector<Expression*> args = parseArgs(findEndParen());
+        }
+        if (id == "while") {
+            consume(LPAREN, std::to_string(peek().line) + ": expected '(' but found: " + peek().toString());
+            Expression* condition = parseExpression(findEndParen());
+            consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
+            Statement* body = parseStatement();
+            return new While(condition, body);
+        }
+        if(peek().type == LPAREN) {
+            consume(LPAREN, "");
+            const std::vector<Expression*> args = parseArgs(findEndParen());
                 
-                consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
-                consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
+            consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
+            consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
 
-                return new CallStatement(Identifier{id}, args);
-            } else if(peek().type == ASSIGN) {
-                consume(ASSIGN, "");
-                Expression* val = parseExpression(findNext(SEMI, static_cast<int>(tokens.size())));
-                consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
+            return new CallStatement(Identifier{id}, args);
+        } else if(peek().type == ASSIGN) {
+            consume(ASSIGN, "");
+            Expression* val = parseExpression(findNext(SEMI, static_cast<int>(tokens.size())));
+            consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
 
-                return new VarAssignment(Identifier{id}, val);
-            }
+            return new VarAssignment(Identifier{id}, val);
         }
     }
 
@@ -173,8 +214,6 @@ Expression* Parser::parseCallExpression(const int until) {
 }
 
 Expression* Parser::parseParen(const int until) {
-    if(peek().type != LPAREN) return parseSingle();
-
     consume(LPAREN, "");
     Expression* expr = parseAddSub(findEndParen());
     consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
@@ -182,13 +221,61 @@ Expression* Parser::parseParen(const int until) {
     return expr;
 }
 
+Expression* Parser::parseCompares(const int until)
+{
+    const int nextEq = findNextOutsideParen(EQUALS, until);
+    const int nextNEq = findNextOutsideParen(NEQUALS, until);
+    const int nextLess = findNextOutsideParen(LESS, until);
+    const int nextLessEq = findNextOutsideParen(LEQUALS, until);
+    const int nextGreater = findNextOutsideParen(GREATER, until);
+    const int nextGreaterEq = findNextOutsideParen(GEQUALS, until);
+
+    if (nextEq == -1 && nextNEq == -1 && nextLess == -1 && nextLessEq == -1 && nextGreater == -1 && nextGreaterEq == -1) {
+        return parseCallExpression(until);
+    }
+
+    std::vector<int> nexts;
+    if (nextEq != -1) nexts.push_back(nextEq);
+    if (nextNEq != -1) nexts.push_back(nextNEq);
+    if (nextLess != -1) nexts.push_back(nextLess);
+    if (nextLessEq != -1) nexts.push_back(nextLessEq);
+    if (nextGreater != -1) nexts.push_back(nextGreater);
+    if (nextGreaterEq != -1) nexts.push_back(nextGreaterEq);
+    int next = *std::min_element(nexts.begin(), nexts.end());
+
+    Expression* left = parseCallExpression(next);
+    BinaryOperator op;
+    if (next == nextEq) op = BinaryOperator::EQUALS;
+    else if (next == nextNEq) op = BinaryOperator::NEQUALS;
+    else if (next == nextLess) op = BinaryOperator::LESS;
+    else if (next == nextLessEq) op = BinaryOperator::LEQUALS;
+    else if (next == nextGreater) op = BinaryOperator::GREATER;
+    else if (next == nextGreaterEq) op = BinaryOperator::GEQUALS;
+    else {
+        std::cerr << peek().line << ": expected comparison operator but found: " << peek().toString() << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    if (op == BinaryOperator::EQUALS) consume(EQUALS, std::to_string(peek().line) + ": expected '==' but found: " + peek().toString());
+    else if (op == BinaryOperator::NEQUALS) consume(NEQUALS, std::to_string(peek().line) + ": expected '!=' but found: " + peek().toString());
+    else if (op == BinaryOperator::LESS) consume(LESS, std::to_string(peek().line) + ": expected '<' but found: " + peek().toString());
+    else if (op == BinaryOperator::LEQUALS) consume(LEQUALS, std::to_string(peek().line) + ": expected '<=' but found: " + peek().toString());
+    else if (op == BinaryOperator::GREATER) consume(GREATER, std::to_string(peek().line) + ": expected '>' but found: " + peek().toString());
+    else consume(GEQUALS, std::to_string(peek().line) + ": expected '>=' but found: " + peek().toString());
+
+    Expression* right = parseCallExpression(until);
+
+    return new BinaryExpression(op, left, right);
+}
+
+
 Expression* Parser::parseSingle() {
     if(peek().type == INT_LIT) {
         return new IntLit(consumeInt().value());
     } else if(peek().type == STRING_LITERAL) {
         return new StringLit(consumeString().value());
     } else if(peek().type == IDENTIFIER) {
-        Identifier id{consumeString().value()};
+        const Identifier id{consumeString().value()};
 
         return new IdExpression(id);
     } else {
@@ -221,7 +308,7 @@ Expression* Parser::parseAddSub(const int until) {
     return new BinaryExpression(op, left, right);
 }
 
-Expression* Parser::parseMulDiv(int until) {
+Expression* Parser::parseMulDiv(const int until) {
     int derefDepth = 0;
     while(peek().type == STAR) {
         derefDepth++;
@@ -231,7 +318,7 @@ Expression* Parser::parseMulDiv(int until) {
     const int nextDiv = findNextOutsideParen(FSLASH, until);
 
     if(nextMul == -1 && nextDiv == -1) {
-        Expression* expr = parseCallExpression(until);
+        Expression* expr = parseCompares(until);
         expr->derefDepth = derefDepth;
         return expr;
     }
@@ -246,10 +333,10 @@ Expression* Parser::parseMulDiv(int until) {
         op = BinaryOperator::MUL;
     }
 
-    Expression* left = parseCallExpression(next);
+    Expression* left = parseCompares(next);
     if(op == BinaryOperator::MUL) consume(STAR, std::to_string(peek().line) + ": expected '*' but found: " + peek().toString());
     else consume(FSLASH, std::to_string(peek().line) + ": expected '/' but found: " + peek().toString());
-    Expression* right = parseCallExpression(until);
+    Expression* right = parseCompares(until);
 
     auto* expr = new BinaryExpression(op, left, right);
     expr->derefDepth = derefDepth;

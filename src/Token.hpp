@@ -27,7 +27,8 @@ enum TokType {
     GREATER,
     LESS,
     LEQUALS,
-    GEQUALS
+    GEQUALS,
+    NEQUALS
 };
 
 struct Token {
@@ -110,6 +111,9 @@ struct Token {
             break;
         case COLON:
             out.append("COLON");
+            break;
+        case NEQUALS:
+            out.append("NEQUALS");
             break;
         default:
             out.append("");

@@ -17,7 +17,7 @@ enum class TypeIdentifierType {
 };
 
 enum class BinaryOperator {
-    PLUS, MINUS, MUL, DIV
+    PLUS, MINUS, MUL, DIV, EQUALS, NEQUALS, LESS, GREATER, LEQUALS, GEQUALS
 };
 
 inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
@@ -369,6 +369,34 @@ public:
     Expression* value;
 };
 
+class While final : public Statement
+{
+public:
+    While(Expression* condition, Statement* body) {
+        this->condition = condition;
+        this->body = body;
+    }
+
+    std::string toString(const int indentLevel) override
+    {
+        std::string out;
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("While\n");
+        for (int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("Condition:\n");
+        out.append(condition->toString(indentLevel+2));
+        out.append("\n");
+        for (int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append(body->toString(indentLevel+2));
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    Expression* condition;
+    Statement* body;
+};
+
 class FunctionDefinition {
 public:
     struct ParamData {
@@ -484,6 +512,7 @@ public:
     virtual void visitVarAssignment(VarAssignment* stmt) = 0;
     virtual void visitVarDeclaration(VarDeclaration* stmt) = 0;
     virtual void visitVarDeclAssign(VarDeclAssign* stmt) = 0;
+    virtual void visitWhile(While* stmt) = 0;
 
     virtual void visitFunctionDefinition(FunctionDefinition* def) = 0;
     virtual void visitProgram(Program* prog) = 0;
@@ -555,6 +584,7 @@ public:
     void visitVarAssignment(VarAssignment* stmt) override;
     void visitVarDeclaration(VarDeclaration* stmt) override;
     void visitVarDeclAssign(VarDeclAssign* stmt) override;
+    void visitWhile(While* stmt) override;
 
     void visitFunctionDefinition(FunctionDefinition* def) override;
     void visitProgram(Program* prog) override;
@@ -581,6 +611,7 @@ private:
     std::vector<OpCode*> textSegment;
 
     int stringIndex = 0;
+    int whileIndex = 0;
 
     size_t offset = 0;
 };

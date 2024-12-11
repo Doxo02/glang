@@ -99,6 +99,50 @@ private:
     std::string second;
 };
 
+class Jump final : public OpCode
+{
+public:
+    Jump(const std::string& type, const std::string& label) {
+        this->type = type;
+        this->label = label;
+    }
+
+    std::string genNasm() override
+    {
+        std::string out = "\t";
+        out.append(type);
+        out.append(" ");
+        out.append(label);
+        return out;
+    }
+
+private:
+    std::string type;
+    std::string label;
+};
+
+class Compare final : public OpCode
+{
+public:
+    Compare(const std::string& first, const std::string& second) {
+        this->first = first;
+        this->second = second;
+    }
+
+    std::string genNasm() override
+    {
+        std::string out = "\tcmp ";
+        out.append(first);
+        out.append(", ");
+        out.append(second);
+        return out;
+    }
+
+private:
+    std::string first;
+    std::string second;
+};
+
 class Add final : public OpCode {
 public:
     Add(const std::string& first, const std::string& second) {
@@ -171,6 +215,31 @@ public:
         out.append(first);
         out.append(", ");
         out.append(second);
+        return out;
+    }
+
+private:
+    std::string first;
+    std::string second;
+};
+
+class NotEqual final : public OpCode
+{
+public:
+    NotEqual(const std::string& first, const std::string& second) {
+        this->first = first;
+        this->second = second;
+    }
+    std::string genNasm() override
+    {
+        std::string out = "\tmov rcx, 0\n";
+        out.append("\tmov rdx, 1\n");
+        out.append("\tcmp ");
+        out.append(first);
+        out.append(", ");
+        out.append(second);
+        out.append("\n\tcmovne rcx, rdx\n");
+        out.append("\tmov rax, rcx");
         return out;
     }
 

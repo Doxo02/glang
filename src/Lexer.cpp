@@ -122,8 +122,17 @@ void Lexer::passLine(const std::string& line, const unsigned int number) {
                         i++;
                     } else
                         tokens.push_back(Token{LESS, number});
+                case '!':
+                    if (line.at(i+1) == '=') {
+                        tokens.push_back(Token{NEQUALS, number});
+                        i++;
+                    } else {
+                        std::cerr << number << ": Unknown token: " << line.at(i) << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                    break;
                 default:
-                    std::cerr << "Unknown token type: " << line.at(i) << std::endl;
+                    std::cerr << number << ":" << i << ": Unknown token type: " << line.at(i) << std::endl;
                     exit(EXIT_FAILURE);
             }
         }

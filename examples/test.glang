@@ -1,18 +1,14 @@
-// argc: i32, argv: char** 
+// argc: i32, argv: char**
+import("stdlib/core.glang");
+
 fn main(argv: char**, argc: i64) -> i64 {
     hello();
-    let x: i64 = add(some_int(), 1);
-    return x;
+    let x: i64 = 2;
+    let y: i64 = 3 + x;
+    return 0;
 }
 
 fn hello() -> void {
-    syscall(1, 0, "Hello World\n", 13, 0, 0, 0);
-}
-
-fn some_int() -> i64 {
-    return 5;
-}
-
-fn add(a: i64, b: i64) -> i64 {
-    return a - b;
+    let str: char* = "Hello World\n";
+    syscall(1, 0, str, strlen(str), 0, 0, 0);
 }

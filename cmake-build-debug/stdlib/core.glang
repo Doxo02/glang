@@ -1,0 +1,8 @@
+fn strlen(str: char*) -> i64 {
+    let c: char = *str;
+    let i: i64 = 0;
+    while(c != 0) {
+        c = *(str + i);
+        i = i + 1;
+    }
+}
