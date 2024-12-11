@@ -58,70 +58,70 @@ void Lexer::passLine(std::string line, unsigned int number) {
         } else {
             switch(c) {
                 case ';':
-                    tokens.push_back(Token{TokType::SEMI});
+                    tokens.push_back(Token{TokType::SEMI, number});
                     break;
                 case '(':
-                    tokens.push_back(Token{TokType::LPAREN});
+                    tokens.push_back(Token{TokType::LPAREN, number});
                     break;
                 case ')':
-                    tokens.push_back(Token{TokType::RPAREN});
+                    tokens.push_back(Token{TokType::RPAREN, number});
                     break;
                 case '{':
-                    tokens.push_back(Token{TokType::LCURLY});
+                    tokens.push_back(Token{TokType::LCURLY, number});
                     break;
                 case '}':
-                    tokens.push_back(Token{TokType::RCURLY});
+                    tokens.push_back(Token{TokType::RCURLY, number});
                     break;
                 case '[':
-                    tokens.push_back(Token{TokType::LBRACE});
+                    tokens.push_back(Token{TokType::LBRACE, number});
                     break;
                 case ']':
-                    tokens.push_back(Token{TokType::RBRACE});
+                    tokens.push_back(Token{TokType::RBRACE, number});
                     break;
                 case '-':
                     if(line.at(i+1) == '>') {
-                        tokens.push_back(Token{RARROW});
+                        tokens.push_back(Token{RARROW, number});
                         i++;
                     } else
-                        tokens.push_back(Token{MINUS});
+                        tokens.push_back(Token{MINUS, number});
                     break;
                 case '/':
                     if(line.at(i+1) == '/')
                         commentFound = true;
                     else
-                        tokens.push_back(Token{FSLASH});
+                        tokens.push_back(Token{FSLASH, number});
                     break;
                 case '+':
-                    tokens.push_back(Token{PLUS});
+                    tokens.push_back(Token{PLUS, number});
                     break;
                 case '*':
-                    tokens.push_back(Token{STAR});
+                    tokens.push_back(Token{STAR, number});
                     break;
                 case ',':
-                    tokens.push_back(Token{COMMA});
+                    tokens.push_back(Token{COMMA, number});
                     break;
                 case '=':
                     if(line.at(i+1) == '=') {
-                        tokens.push_back(Token{EQUALS});
+                        tokens.push_back(Token{EQUALS, number});
                         i++;
                     } else
-                        tokens.push_back(Token{ASSIGN});
+                        tokens.push_back(Token{ASSIGN, number});
                     break;
                 case ':':
-                    tokens.push_back(Token{COLON});
+                    tokens.push_back(Token{COLON, number});
                     break;
                 case '>':
                     if(line.at(i+1) == '=') {
-                        tokens.push_back(Token{GEQUALS});
+                        tokens.push_back(Token{GEQUALS, number});
                         i++;
                     } else
-                        tokens.push_back(Token{GREATER});
+                        tokens.push_back(Token{GREATER, number});
                 case '<':
                     if(line.at(i+1) == '=') {
-                        tokens.push_back(Token{LEQUALS});
+                        tokens.push_back(Token{LEQUALS, number});
                         i++;
                     } else
-                        tokens.push_back(Token{LESS});
+                        tokens.push_back(Token{LESS, number});
             }
         }
     }

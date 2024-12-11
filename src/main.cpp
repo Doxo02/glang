@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
 
     std::string line;
     Lexer lexer;
-    unsigned int number = 0;
+    unsigned int number = 1;
     while(std::getline(srcFile, line)) {
         lexer.passLine(line, number++);
     }

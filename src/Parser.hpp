@@ -18,20 +18,21 @@ private:
     std::vector<Token> tokens;
     int counter = 0;
 
-    Statement* parseStatement();
+    Statement* parseStatement(bool funcBody = false);
     std::vector<Expression*> parseArgs(int until);
-    std::map<std::string, TypeIdentifier> parseParameters();
+    std::map<std::string, FunctionDefinition::ParamData> parseParameters();
 
     Expression* parseExpression(int until);
+    Expression* parseCallExpression(int until);
     Expression* parseParen(int until);
     Expression* parseAddSub(int until);
     Expression* parseMulDiv(int until);
     Expression* parseSingle(int until);
 
-    bool consume(TokType type);
+    void consume(TokType type, std::string errorMsg);
     std::optional<int> consumeInt();
     std::optional<std::string> consumeString();
-    Token peek();
+    Token peek(int i = 0);
     int findNext(TokType type, int until);
     int findNextOutsideParen(TokType type, int until);
     int findEndParen();

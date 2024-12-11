@@ -58,6 +58,8 @@ public:
     virtual std::string toString(int indentLevel) = 0;
 
     virtual void accept(Visitor* visitor) = 0;
+
+    int derefDepth = 0;
 };
 
 class IntLit : public Expression {
@@ -70,6 +72,9 @@ public:
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("IntLit: ");
         out.append(std::to_string(value));
+        out.append("(");
+        out.append(std::to_string(derefDepth));
+        out.append(")");
         return out;
     }
 
@@ -88,6 +93,9 @@ public:
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("StringLit: ");
         out.append(value);
+        out.append("(");
+        out.append(std::to_string(derefDepth));
+        out.append(")");
         return out;
     }
 
@@ -107,6 +115,9 @@ public:
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("IdExpression: ");
         out.append(id.name);
+        out.append("(");
+        out.append(std::to_string(derefDepth));
+        out.append(")");
         return out;
     }
 
@@ -140,6 +151,9 @@ public:
                 out.append("Div: ");
                 break;
         }
+        out.append("(");
+        out.append(std::to_string(derefDepth));
+        out.append(")");
 
         out.append("\n");
         out.append(left->toString(indentLevel + 1));
@@ -154,6 +168,33 @@ public:
     BinaryOperator op;
     Expression* left;
     Expression* right;
+};
+
+class CallExpression : public Expression {
+public:
+    CallExpression(Identifier id, std::vector<Expression*> args) {
+        this->id = id;
+        this->args = args;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out = "";
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("CallExpression: ");
+        out.append(id.name );
+        out.append("\n");
+        for(Expression* expr : args) {
+            out.append(expr->toString(indentLevel + 1));
+            out.append("\n");
+        }
+        out.erase(out.find_last_of('\n'));
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    Identifier id;
+    std::vector<Expression*> args;
 };
 
 class Statement {
@@ -214,7 +255,7 @@ public:
         std::string out = "";
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append("Return:\n");
-        out.append(value->toString(indentLevel + 1));
+        if(value != nullptr) out.append(value->toString(indentLevel + 1));
 
         return out;
     }
@@ -328,7 +369,12 @@ public:
 
 class FunctionDefinition {
 public:
-    FunctionDefinition(Identifier id, Statement* body, TypeIdentifier returnType, std::map<std::string, TypeIdentifier> args) {
+    struct ParamData {
+        TypeIdentifier type;
+        int index;
+    };
+
+    FunctionDefinition(Identifier id, Statement* body, TypeIdentifier returnType, std::map<std::string, ParamData> args) {
         this->id = id;
         this->body = body;
         this->returnType = returnType;
@@ -355,9 +401,9 @@ public:
             for(int i = 0; i < indentLevel+2; i++) out.append("  ");
             out.append(pair.first);
             out.append(": ");
-            out.append(typeIdentifierTypeToString(pair.second.type));
+            out.append(typeIdentifierTypeToString(pair.second.type.type));
             out.append("(");
-            out.append(std::to_string(pair.second.ptrDepth));
+            out.append(std::to_string(pair.second.type.ptrDepth));
             out.append(")");
             out.append("\n");
         }
@@ -374,7 +420,7 @@ public:
     Identifier id;
     Statement* body;
     TypeIdentifier returnType;
-    std::map<std::string, TypeIdentifier> args;
+    std::map<std::string, ParamData> args;
 };
 
 class Program {
@@ -387,7 +433,7 @@ public:
 
 struct Var {
     size_t offset;
-    TypeIdentifierType type;
+    TypeIdentifier type;
 };
 
 class Scope {
@@ -423,6 +469,7 @@ public:
     virtual void visitStringLit(StringLit* expr) = 0;
     virtual void visitIdExpression(IdExpression* expr) = 0;
     virtual void visitBinaryExpression(BinaryExpression* expr) = 0;
+    virtual void visitCallExpression(CallExpression* expr) = 0;
 
     virtual void visitCompound(Compound* stmt) = 0;
     virtual void visitEndCompound(EndCompound* stmt) = 0;
@@ -493,6 +540,7 @@ public:
     void visitStringLit(StringLit* expr) override;
     void visitIdExpression(IdExpression* expr) override;
     void visitBinaryExpression(BinaryExpression* expr) override;
+    void visitCallExpression(CallExpression* expr) override;
 
     void visitCompound(Compound *stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
@@ -518,7 +566,11 @@ private:
     Scope* root;
     Scope* current;
 
-    std::stack<size_t> stack;
+    std::stack<FunctionDefinition*> func;
+    std::stack<size_t> offsetStack;
+    std::stack<std::map<std::string, FunctionDefinition::ParamData>> parameterStack;
+
+    std::map<std::string, FunctionDefinition::ParamData> parameters;
 
     std::vector<OpCode*> dataSegment;
     std::vector<OpCode*> textSegment;

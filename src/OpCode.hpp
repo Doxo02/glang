@@ -185,6 +185,20 @@ public:
     }
 };
 
+class Call : public OpCode {
+public:
+    Call(std::string func) {
+        this->func = func;
+    }
+
+    std::string genNasm() override {
+        return "\tcall " + func;
+    }
+
+private:
+    std::string func;
+};
+
 class ReturnOp : public OpCode {
 public:
     std::string genNasm() override {

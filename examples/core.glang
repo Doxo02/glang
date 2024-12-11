@@ -1,0 +1,7 @@
+strlen(str: char*) -> u64 {
+    let c: char = *char;
+    while(c != 0) {
+        i = i + 1;
+        c = *(char + i)
+    }
+}
