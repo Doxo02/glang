@@ -59,7 +59,7 @@ public:
     virtual ~Expression() = default;
     virtual std::string toString(int indentLevel) = 0;
 
-    virtual void accept(Visitor* visitor) = 0;
+    virtual void accept(Visitor* visitor, std::string reg) = 0;
 
     int derefDepth = 0;
 };
@@ -80,7 +80,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor) override;
+    void accept(Visitor* visitor, std::string reg) override;
     
     int value;
 };
@@ -101,7 +101,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor) override;
+    void accept(Visitor* visitor, std::string reg) override;
     
     std::string value;
 };
@@ -123,7 +123,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor) override;
+    void accept(Visitor* visitor, std::string reg) override;
 
     Identifier id;
 };
@@ -181,7 +181,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor) override;
+    void accept(Visitor* visitor, std::string reg) override;
 
     BinaryOperator op;
     Expression* left;
@@ -209,7 +209,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor) override;
+    void accept(Visitor* visitor, std::string reg) override;
 
     Identifier id;
     std::vector<Expression*> args;
@@ -519,11 +519,11 @@ private:
 class Visitor {
 public:
     virtual ~Visitor() = default;
-    virtual void visitIntLit(IntLit* expr) = 0;
-    virtual void visitStringLit(StringLit* expr) = 0;
-    virtual void visitIdExpression(IdExpression* expr) = 0;
-    virtual void visitBinaryExpression(BinaryExpression* expr) = 0;
-    virtual void visitCallExpression(CallExpression* expr) = 0;
+    virtual void visitIntLit(IntLit* expr, std::string reg) = 0;
+    virtual void visitStringLit(StringLit* expr, std::string reg) = 0;
+    virtual void visitIdExpression(IdExpression* expr, std::string reg) = 0;
+    virtual void visitBinaryExpression(BinaryExpression* expr, std::string reg) = 0;
+    virtual void visitCallExpression(CallExpression* expr, std::string reg) = 0;
 
     virtual void visitCompound(Compound* stmt) = 0;
     virtual void visitEndCompound(EndCompound* stmt) = 0;
@@ -541,10 +541,10 @@ public:
 
 class ConstExprVisitor : public Visitor {
 public:
-    void visitIntLit(IntLit* expr) override;
-    void visitStringLit(StringLit* expr) override;
-    void visitIdExpression(IdExpression* expr) override;
-    void visitBinaryExpression(BinaryExpression* expr) override;
+    void visitIntLit(IntLit* expr, std::string reg) override;
+    void visitStringLit(StringLit* expr, std::string reg) override;
+    void visitIdExpression(IdExpression* expr, std::string reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
 
     void visitCompound(Compound* stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
@@ -565,10 +565,10 @@ private:
 class CountVarDeclVisitor : public Visitor {
 public:
     CountVarDeclVisitor();
-    void visitIntLit(IntLit* expr) override;
-    void visitStringLit(StringLit* expr) override;
-    void visitIdExpression(IdExpression* expr) override;
-    void visitBinaryExpression(BinaryExpression* expr) override;
+    void visitIntLit(IntLit* expr, std::string reg) override;
+    void visitStringLit(StringLit* expr, std::string reg) override;
+    void visitIdExpression(IdExpression* expr, std::string reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
 
     void visitCompound(Compound *stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
@@ -591,11 +591,11 @@ class CodeGenVisitor final : public Visitor {
 public:
     CodeGenVisitor();
 
-    void visitIntLit(IntLit* expr) override;
-    void visitStringLit(StringLit* expr) override;
-    void visitIdExpression(IdExpression* expr) override;
-    void visitBinaryExpression(BinaryExpression* expr) override;
-    void visitCallExpression(CallExpression* expr) override;
+    void visitIntLit(IntLit* expr, std::string reg) override;
+    void visitStringLit(StringLit* expr, std::string reg) override;
+    void visitIdExpression(IdExpression* expr, std::string reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
+    void visitCallExpression(CallExpression* expr, std::string reg) override;
 
     void visitCompound(Compound *stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
@@ -618,6 +618,9 @@ public:
 private:
     void push(const std::string& what, size_t bytes);
     void pop(const std::string& where, size_t bytes);
+
+    void deref(int depth, const std::string& reg);
+    void makeType(TypeIdentifierType type);
 
     Scope* root;
     Scope* current;
