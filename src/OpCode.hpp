@@ -223,6 +223,28 @@ private:
     std::string second;
 };
 
+class XOR final : public OpCode
+{
+public:
+    XOR(const std::string& first, const std::string& second) {
+        this->first = first;
+        this->second = second;
+    }
+
+    std::string genNasm() override
+    {
+        std::string out = "\txor ";
+        out.append(first);
+        out.append(", ");
+        out.append(second);
+        return out;
+    }
+
+private:
+    std::string first;
+    std::string second;
+};
+
 class NotEqual final : public OpCode
 {
 public:
@@ -290,7 +312,7 @@ public:
     }
 
     std::string genNasm() override {
-        replaceAll(toDefine, "\\n", "\", 0xA, 0xD, \"");
+        replaceAll(toDefine, "\\n", "\", 0xA, \"");
         std::string out = "\t";
         out.append(id);
         out.append(": db \"");
