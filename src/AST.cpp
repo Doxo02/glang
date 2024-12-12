@@ -271,7 +271,7 @@ void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr) {
     for(int i = 0; i < expr->derefDepth; i++) toPush.append("[");
     toPush.append("rax");
     for(int i = 0; i < expr->derefDepth; i++) toPush.append("]");
-    push("rax");
+    push(toPush);
 }
 
 void CodeGenVisitor::visitCallExpression(CallExpression* expr) {
@@ -319,6 +319,7 @@ void CodeGenVisitor::visitReturn(Return* stmt) {
         parameters = parameterStack.top();
         parameterStack.pop();
     }
+    func.pop();
 }
 
 void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {

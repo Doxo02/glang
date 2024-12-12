@@ -5,10 +5,10 @@ fn main(argv: char**, argc: i64) -> i64 {
     hello();
     let x: i64 = 2;
     let y: i64 = 3 + x;
-    return 0;
+    return strlen("test");
 }
 
 fn hello() -> void {
     let str: char* = "Hello World\n";
-    syscall(1, 0, str, strlen(str), 0, 0, 0);
+    syscall(1, 1, str, strlen(str), 0, 0, 0);
 }

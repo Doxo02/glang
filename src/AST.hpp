@@ -2,6 +2,7 @@
 #define AST_HPP
 
 #include <cstddef>
+#include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -151,12 +152,28 @@ public:
             case BinaryOperator::DIV:
                 out.append("Div: ");
                 break;
+            case BinaryOperator::EQUALS:
+                out.append("Equals: ");
+                break;
+            case BinaryOperator::NEQUALS:
+                out.append("NotEquals: ");
+                break;
+            case BinaryOperator::LESS:
+                out.append("Less: ");
+                break;
+            case BinaryOperator::GREATER:
+                out.append("Greater: ");
+                break;
+            case BinaryOperator::LEQUALS:
+                out.append("LessEquals: ");
+                break;
+            case BinaryOperator::GEQUALS:
+                out.append("GreaterEquals: ");
+                break;
         }
         out.append("(");
         out.append(std::to_string(derefDepth));
-        out.append(")");
-
-        out.append("\n");
+        out.append(")\n");
         out.append(left->toString(indentLevel + 1));
         out.append("\n");
         out.append(right->toString(indentLevel + 1));
@@ -235,7 +252,10 @@ public:
     EndCompound() = default;
 
     std::string toString(int indentLevel) override {
-        return "EndCompound\n";
+        std::string out;
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("EndCompound");
+        return out;
     }
 
     void accept(Visitor* visitor) override;
@@ -304,8 +324,8 @@ public:
         std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
         out.append(id.name);
-        out.append(" = ");
-        out.append(value->toString(0));
+        out.append(":\n");
+        out.append(value->toString(indentLevel + 1));
         return out;
     }
 
@@ -381,12 +401,13 @@ public:
     {
         std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
-        out.append("While\n");
+        out.append("While:\n");
         for (int i = 0; i < indentLevel+1; i++) out.append("  ");
         out.append("Condition:\n");
         out.append(condition->toString(indentLevel+2));
         out.append("\n");
         for (int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("Body:\n");
         out.append(body->toString(indentLevel+2));
         return out;
     }

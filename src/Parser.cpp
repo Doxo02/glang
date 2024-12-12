@@ -78,13 +78,15 @@ Program* Parser::parse() {
             Statement* body = parseStatement(true);
 
             defs.push_back(new FunctionDefinition(id, body, type, args));
-        } else if(str == "let") {
+        }
+        else if(str == "let") {
             const Identifier id{consumeString().value()};
             consume(COLON, std::to_string(peek().line) + ": expected ':' but found: " + peek().toString());
             const auto type = TypeIdentifier{strToTypeId(consumeString().value())};
             consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
             decls.push_back(new VarDeclaration(id, type));
-        } else if (str == "import") {
+        }
+        else if (str == "import") {
             consume(LPAREN, std::to_string(peek().line) + ": expected '(' but found: " + peek().toString());
             if (peek().type != STRING_LITERAL) {
                 std::cerr << peek().line << ": expected STRING_LITERAL but found: " << peek().toString() << std::endl;
@@ -109,11 +111,20 @@ Program* Parser::parse() {
             for (VarDeclaration* decl : program->declarations) {
                 decls.push_back(decl);
             }
-        } else {
+        }
+        else {
             std::cerr << peek().line << ": expected 'fn', 'let' or 'import' but found: " << peek().toString() << std::endl;
             exit(EXIT_FAILURE);
         }
     }
+
+    for (VarDeclaration* decl : decls) {
+        std::cout << decl->id.name << std::endl;
+    }
+    for (FunctionDefinition* def : defs) {
+        std::cout << def->id.name << std::endl;
+    }
+
     return new Program{decls, defs};
 }
 
@@ -203,7 +214,7 @@ Expression* Parser::parseExpression(const int until)
 }
 
 Expression* Parser::parseCallExpression(const int until) {
-    if(peek().type != IDENTIFIER || peek(1).type != LPAREN) return parseParen(until);
+    if(peek().type != IDENTIFIER || counter + 1 >= tokens.size() || peek(1).type != LPAREN) return parseParen(until);
     Identifier id{consumeString().value()};
     
     consume(LPAREN, "");
@@ -214,6 +225,8 @@ Expression* Parser::parseCallExpression(const int until) {
 }
 
 Expression* Parser::parseParen(const int until) {
+    if (peek().type != LPAREN) return parseSingle();
+
     consume(LPAREN, "");
     Expression* expr = parseAddSub(findEndParen());
     consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
@@ -280,6 +293,7 @@ Expression* Parser::parseSingle() {
         return new IdExpression(id);
     } else {
         std::cerr << peek().line << ": expected INT_LIT, STRING_LIT or IDENTIFIER but found: " << peek().toString() << std::endl;
+        exit(EXIT_FAILURE);
     }
     return nullptr;
 }
