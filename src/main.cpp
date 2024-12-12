@@ -10,8 +10,8 @@ void printParseTree(Program* program);
 
 int main(int argc, char** argv) {
     if(argc < 2) {
-        std::cout << "Usage: rlang <source_file>" << std::endl;
-        return 1;
+        std::cout << "Usage: glang <source_file>" << std::endl;
+        return EXIT_FAILURE;
     }
 
     std::string fileName = argv[1];
