@@ -118,13 +118,6 @@ Program* Parser::parse() {
         }
     }
 
-    for (VarDeclaration* decl : decls) {
-        std::cout << decl->id.name << std::endl;
-    }
-    for (FunctionDefinition* def : defs) {
-        std::cout << def->id.name << std::endl;
-    }
-
     return new Program{decls, defs};
 }
 
