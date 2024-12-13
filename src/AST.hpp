@@ -10,6 +10,7 @@
 #include <stack>
 
 #include "OpCode.hpp"
+#include "ScratchAllocator.h"
 
 class Visitor;
 
@@ -481,6 +482,7 @@ public:
 
     std::vector<VarDeclaration*> declarations;
     std::vector<FunctionDefinition*> functions;
+    std::vector<std::string> imports;
 };
 
 struct Var {
@@ -620,7 +622,7 @@ private:
     void pop(const std::string& where, size_t bytes);
 
     void deref(int depth, const std::string& reg);
-    void makeType(TypeIdentifierType type);
+    void makeType(TypeIdentifierType type, int reg);
 
     Scope* root;
     Scope* current;
@@ -638,6 +640,8 @@ private:
     int whileIndex = 0;
 
     size_t offset = 0;
+
+    ScratchAllocator allocator;
 };
 
 #endif

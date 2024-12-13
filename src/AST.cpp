@@ -6,6 +6,13 @@
 #include <string>
 #include <vector>
 
+const std::string GPREGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+const std::string GPREGS8[] = {"dil", "sil", "dl", "cl", "r8b", "r9b"};
+const std::string GPREGS16[] = {"di", "si", "dx", "cx", "r8w", "r9w"};
+const std::string GPREGS32[] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
+
+bool used_regs[6] = {false, false, false, false, false, false};
+
 void IntLit::accept(Visitor* visitor, std::string reg) {
     visitor->visitIntLit(this, reg);
 }
@@ -128,7 +135,7 @@ void ConstExprVisitor::visitReturn(Return* stmt) {
 
 void ConstExprVisitor::visitCallStatement(CallStatement* stmt) {
     for(auto & argument : stmt->arguments) {
-        //argument->accept(this, TODO);
+        //argument->accept(this, );
 
         if(stack.top().has_value()) argument = new IntLit(stack.top().value());
         stack.pop();
@@ -199,6 +206,7 @@ void CodeGenVisitor::pop(const std::string& where, const size_t bytes = 8) {
 CodeGenVisitor::CodeGenVisitor() {
     root = new Scope(nullptr);
     current = root;
+    allocator = ScratchAllocator();
 }
 
 void CodeGenVisitor::visitIntLit(IntLit* expr, const std::string reg) {
@@ -218,80 +226,86 @@ void CodeGenVisitor::visitIdExpression(IdExpression* expr, const std::string reg
         const int off = static_cast<int>(parameters.size()) - index;
 
         textSegment.push_back(new Move(reg, "qword [rbp + " + std::to_string(off*8+8) + "]"));
-        int i = 0;
-        if(expr->id.name == "argv") i = 1;
-        deref(expr->derefDepth - i, reg);
+        deref(expr->derefDepth, reg);
 
         if (expr->derefDepth == type.ptrDepth) {
-            makeType(type.type);
+            makeType(type.type, TODO);
         }
     } else {
-        Var var = current->getVar(expr->id);
+        const Var var = current->getVar(expr->id);
         const int off = offset - var.offset;
 
         textSegment.push_back(new Move(reg, "qword [rsp + " + std::to_string(off) + "]"));
         deref(expr->derefDepth, reg);
 
         if (expr->derefDepth == var.type.ptrDepth) {
-            makeType(var.type.type);
+            makeType(var.type.type, TODO);
         }
     }
 }
 
 void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr, const std::string reg) {
+    int r = allocator.allocate();
     expr->left->accept(this, reg);
-    expr->right->accept(this, "r11");
+    expr->right->accept(this, allocator.getReg(r));
     if(expr->op == BinaryOperator::PLUS) {
-        textSegment.push_back(new Add(reg, "r11"));
+        textSegment.push_back(new Add(reg, allocator.getReg(r)));
     }
     else if(expr->op == BinaryOperator::MINUS) {
-        textSegment.push_back(new Sub(reg, "r11"));
+        textSegment.push_back(new Sub(reg, allocator.getReg(r)));
     }
     else if(expr->op == BinaryOperator::MUL) {
-        textSegment.push_back(new Multiply(reg, "r11"));
+        textSegment.push_back(new Multiply(reg, allocator.getReg(r)));
     }
     else if(expr->op == BinaryOperator::DIV) {
-        textSegment.push_back(new Div(reg, "r11"));
+        textSegment.push_back(new Div(reg, allocator.getReg(r)));
     }
     else if (expr->op == BinaryOperator::NEQUALS) {
-        textSegment.push_back(new NotEqual(reg, "r11"));
+        textSegment.push_back(new NotEqual(reg, allocator.getReg(r)));
     }
+    allocator.free(r);
 
     deref(expr->derefDepth, reg);
 }
 
+// rdi: 1st param
+// rsi: 2nd param
+// rdx: 3rd param
+// rcx: 4th param
+// r8:  5th param
+// r9:  6th param
+
 void CodeGenVisitor::visitCallExpression(CallExpression* expr, std::string reg) {
     if(expr->id.name == "syscall") {
         expr->args.at(0)->accept(this, "rax");
-        expr->args.at(1)->accept(this, "rdi");
-        expr->args.at(2)->accept(this, "rsi");
-        expr->args.at(3)->accept(this, "rdx");
-        expr->args.at(4)->accept(this, "r10");
-        expr->args.at(5)->accept(this, "r8");
-        expr->args.at(6)->accept(this, "r9");
+
+        for (int i = 1; i < expr->args.size(); i++)
+        {
+            expr->args.at(i)->accept(this, REGS[i-1]);
+        }
 
         textSegment.push_back(new Syscall());
     } else {
-        for (Expression* expr : expr->args)
+        int r = allocator.allocate();
+        for (Expression* arg : expr->args)
         {
-            expr->accept(this, "r11");
-            push("r11");
+            arg->accept(this, allocator.getReg(r));
+            push(allocator.getReg(r));
         }
         textSegment.push_back(new Call(expr->id.name));
         for (int i = 0; i < expr->args.size(); i++)
         {
-            pop("r11");
+            pop(allocator.getReg(r));
         }
 
         if (reg != "rax")
             textSegment.push_back(new Move(reg, "rax"));
+
+        allocator.free(r);
     }
 }
 
 void CodeGenVisitor::visitCompound(Compound* stmt) {
-    // CountVarDeclVisitor* visitor = new CountVarDeclVisitor();
-    // stmt->accept(visitor);
-    // textSegment.push_back(new Sub("rsp", std::to_string(visitor->getNumVarDecls() * 8)));
     current = new Scope(current);
 }
 
@@ -321,21 +335,22 @@ void CodeGenVisitor::visitReturn(Return* stmt) {
 }
 
 void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {
+    int r = allocator.allocate();
     if(stmt->id.name == "syscall") {
-        stmt->arguments.at(0)->accept(this, "rax");
-        push("rax");
-        stmt->arguments.at(1)->accept(this, "rax");
-        push("rax");
-        stmt->arguments.at(2)->accept(this, "rax");
-        push("rax");
-        stmt->arguments.at(3)->accept(this, "rax");
-        push("rax");
-        stmt->arguments.at(4)->accept(this, "rax");
-        push("rax");
-        stmt->arguments.at(6)->accept(this, "rax");
-        push("rax");
-        stmt->arguments.at(5)->accept(this, "rax");
-        push("rax");
+        stmt->arguments.at(0)->accept(this, allocator.getReg(r));
+        push(allocator.getReg(r));
+        stmt->arguments.at(1)->accept(this, allocator.getReg(r));
+        push(allocator.getReg(r));
+        stmt->arguments.at(2)->accept(this, allocator.getReg(r));
+        push(allocator.getReg(r));
+        stmt->arguments.at(3)->accept(this, allocator.getReg(r));
+        push(allocator.getReg(r));
+        stmt->arguments.at(4)->accept(this, allocator.getReg(r));
+        push(allocator.getReg(r));
+        stmt->arguments.at(6)->accept(this, allocator.getReg(r));
+        push(allocator.getReg(r));
+        stmt->arguments.at(5)->accept(this, allocator.getReg(r));
+        push(allocator.getReg(r));
 
         pop("r9");
         pop("r8");
@@ -349,28 +364,32 @@ void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {
     } else {
         for (Expression* expr : stmt->arguments)
         {
-            expr->accept(this, "r11");
-            push("r11");
+            expr->accept(this, allocator.getReg(r));
+            push(allocator.getReg(r));
         }
         textSegment.push_back(new Call(stmt->id.name));
 
         for (int i = 0; i < stmt->arguments.size(); i++)
         {
-            pop("r11");
+            pop(allocator.getReg(r));
         }
     }
+
+    allocator.free(r);
 
     //parameterStack.push(parameters);
 }
 
 void CodeGenVisitor::visitVarAssignment(VarAssignment *stmt) {
     Var var = current->getVar(stmt->id);
-    stmt->value->accept(this, "rax");
+    int r = allocator.allocate();
+    stmt->value->accept(this, allocator.getReg(r));
     if (var.type.ptrDepth == 0)
     {
-        makeType(var.type.type);
+        makeType(var.type.type, TODO);
     }
-    textSegment.push_back(new Move("[rsp + " + std::to_string(offset - var.offset) + "]", "rax"));
+    textSegment.push_back(new Move("[rsp + " + std::to_string(offset - var.offset) + "]", allocator.getReg(r)));
+    allocator.free(r);
 }
 
 void CodeGenVisitor::visitVarDeclaration(VarDeclaration* stmt) {
@@ -379,17 +398,22 @@ void CodeGenVisitor::visitVarDeclaration(VarDeclaration* stmt) {
 }
 
 void CodeGenVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
-    stmt->value->accept(this, "rax");
-    push("rax");
+    int r = allocator.allocate();
+    stmt->value->accept(this, allocator.getReg(r));
+    push(allocator.getReg(r));
     current->addVar(stmt->id, Var{offset, stmt->type});
+    allocator.free(r);
 }
 
 void CodeGenVisitor::visitWhile(While* stmt)
 {
+    int r = allocator.allocate();
+
     int i = whileIndex++;
     textSegment.push_back(new Label("while" + std::to_string(i) + "_start"));
-    stmt->condition->accept(this, "rax");
-    textSegment.push_back(new Compare("rax", "0"));
+    stmt->condition->accept(this, allocator.getReg(r));
+    textSegment.push_back(new Compare(allocator.getReg(r), "0"));
+    allocator.free(r);
     textSegment.push_back(new Jump("je", "while" + std::to_string(i) + "_end"));
     stmt->body->accept(this);
     textSegment.push_back(new Jump("jmp", "while" + std::to_string(i) + "_start"));
@@ -419,8 +443,9 @@ void CodeGenVisitor::deref(const int depth, const std::string& reg)
     }
 }
 
-void CodeGenVisitor::makeType(const TypeIdentifierType type)
+void CodeGenVisitor::makeType(const TypeIdentifierType type, const int reg)
 {
+    int r = allocator.allocate();
     switch (type)
     {
     case TypeIdentifierType::I64:
@@ -428,20 +453,20 @@ void CodeGenVisitor::makeType(const TypeIdentifierType type)
         break;
     case TypeIdentifierType::I8:
     case TypeIdentifierType::CHAR:
-        textSegment.push_back(new XOR("rbx", "rbx"));
-        textSegment.push_back(new Move("bl", "al"));
-        textSegment.push_back(new Move("rax", "rbx"));
+        textSegment.push_back(new XOR(ScratchAllocator::getReg(r), ScratchAllocator::getReg(r)));
+        textSegment.push_back(new Move(ScratchAllocator::getReg8(r), GPREGS8[reg]));
+        textSegment.push_back(new Move(GPREGS[reg], ScratchAllocator::getReg(r)));
         break;
     case TypeIdentifierType::I16:
-        textSegment.push_back(new XOR("rbx", "rbx"));
-        textSegment.push_back(new Move("bx", "ax"));
-        textSegment.push_back(new Move("rax", "rbx"));
+        textSegment.push_back(new XOR(ScratchAllocator::getReg(r), ScratchAllocator::getReg(r)));
+        textSegment.push_back(new Move(ScratchAllocator::getReg16(r), GPREGS16[reg]));
+        textSegment.push_back(new Move(GPREGS8[reg], ScratchAllocator::getReg(r)));
         break;
     case TypeIdentifierType::I32:
     case TypeIdentifierType::F32:
-        textSegment.push_back(new XOR("rbx", "rbx"));
-        textSegment.push_back(new Move("ebx", "eax"));
-        textSegment.push_back(new Move("rax", "rbx"));
+        textSegment.push_back(new XOR(ScratchAllocator::getReg(r), ScratchAllocator::getReg(r)));
+        textSegment.push_back(new Move(ScratchAllocator::getReg32(r), GPREGS32[reg]));
+        textSegment.push_back(new Move(GPREGS[reg], ScratchAllocator::getReg(r)));
         break;
     case TypeIdentifierType::VOID:
     case TypeIdentifierType::BOOL:

@@ -26,8 +26,6 @@ int main(int argc, char** argv) {
     }
     srcFile.close();
 
-    //lexer.printTokens();
-
     std::string outFileName = fileName.replace(fileName.find(".glang"), 6, ".asm");
 
     Parser parser(lexer.getTokens());
@@ -37,7 +35,7 @@ int main(int argc, char** argv) {
     //ConstExprVisitor cVisitor;
     //program->accept(&cVisitor);
 
-    //printParseTree(program);
+    printParseTree(program);
 
     CodeGenVisitor visitor;
 
@@ -52,6 +50,10 @@ int main(int argc, char** argv) {
     outFile << "section .text" << std::endl;
     outFile << "global _start" << std::endl;
     outFile << "_start:" << std::endl;
+    outFile << "\tmov rdi, [rsp]" << std::endl;
+    outFile << "\tlea rsi, [rsp + 8]" << std::endl;
+    outFile << "\tpush rdi" << std::endl;
+    outFile << "\tpush rsi" << std::endl;
     outFile << "\tcall main" << std::endl;
     outFile << "\tmov rdi, rax" << std::endl;
     outFile << "\tmov rax, 60" << std::endl;
