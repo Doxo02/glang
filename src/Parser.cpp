@@ -1,6 +1,5 @@
 #include "Parser.hpp"
 
-#include <cstddef>
 #include <fstream>
 
 #include "AST.hpp"
@@ -8,6 +7,7 @@
 
 #include <iostream>
 #include <ostream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -111,8 +111,12 @@ Program* Parser::parse() {
             Parser parser(lexer.getTokens());
             Program* import_prog = parser.parse();
 
+            // for(std::string label : import_prog->externs) {
+            //     program->addExtern(label);
+            // }
+
             for (FunctionDefinition* def : import_prog->functions) {
-                program->functions.push_back(def);
+                program->addExtern(def->id.name);
             }
             for (VarDeclaration* decl : import_prog->declarations) {
                 program->declarations.push_back(decl);
@@ -473,4 +477,6 @@ TypeIdentifierType Parser::strToTypeId(const std::string& str) {
     if(str == "f64") {
         return TypeIdentifierType::F64;
     }
+
+    throw std::runtime_error("unrecognized type: " + str);
 }

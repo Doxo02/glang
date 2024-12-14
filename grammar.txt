@@ -1,17 +1,20 @@
 ID := [a-zA-Z] [a-zA-Z0-9]*
 INT_LIT := [0-9]+
 
+bin_op := '+' | '-' | '*' | '/' | '==' | '<' | '<=' | '>' | '>=' | '!='
+
 type := "i8" | "i16" | "i32" | "i64" | "void" | "char" | "f32" | "f64"
 type_ident := type | ('*')+type | type('['INT_LIT']')+
 
 declaration := ID ':' type_ident ';'
              | ID ':' type_ident '=' expression ';'
 
-statement := if_statement | return_statement | scope | call_statement
+statement := if_statement | return_statement | scope | call_statement | while_statemnt
 
 scope := '{' (statement)* '}'
 
 if_statement := "if" '(' expression ')' statement ("else" statement)?
+while_statemnt := "while" '(' expression ')' statement
 
 return_statement := "return" expression ';'
 
@@ -25,3 +28,4 @@ expression :=
       INT_LIT
     | STRING_LIT
     | '(' expression ')'
+    | expression bin_op expression

@@ -9,3 +9,7 @@ CMakePresets.json
 examples/*.asm
 examples/*.o
 examples/*.out
+
+stdlib/*.asm
+stdlib/*.o
+stdlib/*.a

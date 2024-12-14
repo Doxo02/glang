@@ -442,6 +442,7 @@ void CodeGenVisitor::visitWhile(While* stmt)
 }
 
 void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {
+    globals.push_back(def->id.name);
     textSegment.push_back(new Label(def->id.name));
     textSegment.push_back(new Push("rbp"));
     textSegment.push_back(new Move("rbp", "rsp"));
@@ -532,4 +533,8 @@ std::vector<OpCode*> CodeGenVisitor::getDataSegment() {
 
 std::vector<OpCode*> CodeGenVisitor::getTextSegment() {
     return textSegment;
+}
+
+std::vector<std::string> CodeGenVisitor::getGlobals() {
+    return globals;
 }

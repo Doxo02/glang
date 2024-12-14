@@ -534,10 +534,18 @@ public:
 class Program {
 public:
     void accept(Visitor* visitor);
+    
+    inline void addExtern(std::string label) {
+        externs.push_back(label);
+    }
+
+    inline std::vector<std::string> getExterns() {
+        return externs;
+    }
 
     std::vector<VarDeclaration*> declarations;
     std::vector<FunctionDefinition*> functions;
-    std::vector<std::string> imports;
+    std::vector<std::string> externs;
 };
 
 struct Var {
@@ -649,6 +657,7 @@ public:
 
     std::vector<OpCode*> getDataSegment();
     std::vector<OpCode*> getTextSegment();
+    std::vector<std::string> getGlobals();
 
     ScratchAllocator* getScratchAlloctor() { return &allocator; }
     void setParams(std::map<std::string, FunctionDefinition::ParamData> p);
@@ -674,6 +683,7 @@ private:
 
     std::vector<OpCode*> dataSegment;
     std::vector<OpCode*> textSegment;
+    std::vector<std::string> globals;
 
     int stringIndex = 0;
     int whileIndex = 0;

@@ -9,9 +9,16 @@
 void printParseTree(Program* program);
 
 int main(int argc, char** argv) {
+    bool asLib = false;
+
     if(argc < 2) {
         std::cout << "Usage: glang <source_file>" << std::endl;
         return EXIT_FAILURE;
+    }
+    if(argc > 2) {
+        if(std::string(argv[2]).compare("-L") == 0) {
+            asLib = true;
+        }
     }
 
     std::string fileName = argv[1];
@@ -43,18 +50,29 @@ int main(int argc, char** argv) {
 
     auto data = visitor.getDataSegment();
     auto text = visitor.getTextSegment();
+    auto globals = visitor.getGlobals();
+    auto externs = program->getExterns();
 
     std::ofstream outFile(outFileName);
 
     outFile << "section .text" << std::endl;
-    outFile << "global _start" << std::endl;
-    outFile << "_start:" << std::endl;
-    outFile << "\tmov rdi, [rsp]" << std::endl;
-    outFile << "\tlea rsi, [rsp + 8]" << std::endl;
-    outFile << "\tcall main" << std::endl;
-    outFile << "\tmov rdi, rax" << std::endl;
-    outFile << "\tmov rax, 60" << std::endl;
-    outFile << "\tsyscall" << std::endl;
+    if(!asLib) {
+        outFile << "global _start" << std::endl;
+        outFile << "_start:" << std::endl;
+        outFile << "\tmov rdi, [rsp]" << std::endl;
+        outFile << "\tlea rsi, [rsp + 8]" << std::endl;
+        outFile << "\tcall main" << std::endl;
+        outFile << "\tmov rdi, rax" << std::endl;
+        outFile << "\tmov rax, 60" << std::endl;
+        outFile << "\tsyscall" << std::endl;
+    }
+
+    for(std::string label : globals) {
+        outFile << "global " << label << std::endl;
+    }
+    for(std::string label : externs) {
+        outFile << "extern " << label << std::endl;
+    }
 
     for(auto t: text) {
         outFile << t->genNasm() << std::endl;
