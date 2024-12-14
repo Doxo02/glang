@@ -1,6 +1,7 @@
 #ifndef AST_HPP
 #define AST_HPP
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -15,10 +16,6 @@ class Visitor;
 
 enum class TypeIdentifierType {
     I8, I16, I32, I64, VOID, CHAR, F32, F64, BOOL
-};
-
-enum class BinaryOperator {
-    PLUS, MINUS, MUL, DIV, EQUALS, NEQUALS, LESS, GREATER, LEQUALS, GEQUALS
 };
 
 inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
@@ -261,10 +258,69 @@ public:
     void accept(Visitor* visitor) override;
 };
 
-class If : Statement {
+class If : public Statement {
 public:
+    If(Expression* condition, Statement* body) {
+        this->condition = condition;
+        this->body = body;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out;
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("If:\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("Condition:\n");
+        out.append(condition->toString(indentLevel+2));
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("IfBody:\n");
+        out.append(body->toString(indentLevel+2));
+
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
     Expression* condition;
     Statement* body;
+};
+
+class IfElse : public Statement {
+public:
+    IfElse(Expression* condition, Statement* ifBody, Statement* elseBody) {
+        this->condition = condition;
+        this->ifBody = ifBody;
+        this->elseBody = elseBody;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out;
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("IfElse:\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("Condition:\n");
+        out.append(condition->toString(indentLevel+2));
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("IfBody:\n");
+        out.append(ifBody->toString(indentLevel+2));
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("ElseBody:\n");
+        out.append(elseBody->toString(indentLevel+2));
+
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    Expression* condition;
+    Statement* ifBody;
+    Statement* elseBody;
 };
 
 class Return final : public Statement {
@@ -529,6 +585,7 @@ public:
     virtual void visitCompound(Compound* stmt) = 0;
     virtual void visitEndCompound(EndCompound* stmt) = 0;
     virtual void visitIf(If* stmt) = 0;
+    virtual void visitIfElse(IfElse* stmt) = 0;
     virtual void visitReturn(Return* stmt) = 0;
     virtual void visitCallStatement(CallStatement* stmt) = 0;
     virtual void visitVarAssignment(VarAssignment* stmt) = 0;
@@ -550,6 +607,7 @@ public:
     void visitCompound(Compound* stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
     void visitIf(If* stmt) override;
+    void visitIfElse(IfElse* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
     void visitVarAssignment(VarAssignment* stmt) override;
@@ -576,6 +634,7 @@ public:
     void visitCompound(Compound *stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
     void visitIf(If* stmt) override;
+    void visitIfElse(IfElse* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
     void visitVarAssignment(VarAssignment* stmt) override;
@@ -591,6 +650,11 @@ public:
     std::vector<OpCode*> getDataSegment();
     std::vector<OpCode*> getTextSegment();
 
+    ScratchAllocator* getScratchAlloctor() { return &allocator; }
+    void setParams(std::map<std::string, FunctionDefinition::ParamData> p);
+
+    void pushFuncDef(FunctionDefinition* funcDef) { func.push(funcDef); }
+
 private:
     void push(const std::string& what, size_t bytes);
     void pop(const std::string& where, size_t bytes);
@@ -604,6 +668,7 @@ private:
     std::stack<FunctionDefinition*> func;
     std::stack<size_t> offsetStack;
     std::stack<std::map<std::string, FunctionDefinition::ParamData>> parameterStack;
+    std::stack<std::array<bool, 7>> usedRegStack;
 
     std::map<std::string, FunctionDefinition::ParamData> parameters;
 
@@ -612,6 +677,7 @@ private:
 
     int stringIndex = 0;
     int whileIndex = 0;
+    int ifIndex = 0;
 
     size_t offset = 0;
 

@@ -1,6 +1,6 @@
-import("stdlib/core");
+import("stdlib/linux");
 
 fn main(argc: i64, argv: char**) -> i32 {
-    puts(*argv);
+    puts("Hello, World!\n");
     return 0;
 }

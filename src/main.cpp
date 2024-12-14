@@ -51,8 +51,6 @@ int main(int argc, char** argv) {
     outFile << "_start:" << std::endl;
     outFile << "\tmov rdi, [rsp]" << std::endl;
     outFile << "\tlea rsi, [rsp + 8]" << std::endl;
-    outFile << "\tpush rdi" << std::endl;
-    outFile << "\tpush rsi" << std::endl;
     outFile << "\tcall main" << std::endl;
     outFile << "\tmov rdi, rax" << std::endl;
     outFile << "\tmov rax, 60" << std::endl;

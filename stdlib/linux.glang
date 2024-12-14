@@ -1,0 +1,9 @@
+import("stdlib/core");
+
+fn puts(str: char*) -> void {
+    syscall(1, 1, str, strlen(str), 0, 0, 0);
+}
+
+fn sys_exit(code: i32) -> void {
+    syscall(60, code, 0, 0, 0, 0, 0);
+}

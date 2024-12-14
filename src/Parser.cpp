@@ -1,5 +1,6 @@
 #include "Parser.hpp"
 
+#include <cstddef>
 #include <fstream>
 
 #include "AST.hpp"
@@ -186,13 +187,24 @@ Statement* Parser::parseStatement(const bool funcBody) {
             Statement* body = parseStatement();
             return new While(condition, body);
         }
+        if(id == "if") {
+            consume(LPAREN, std::to_string(peek().line) + ": expected '(' but found: " + peek().toString());
+            Expression* condition = parseExpression(findEndParen());
+            consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
+            Statement* body = parseStatement();
+            if(peek().type == IDENTIFIER && peek().stringValue.value() == "else") {
+                consume(IDENTIFIER, "");
+                Statement* elseBody = parseStatement();
+                return new IfElse(condition, body, elseBody);
+            }
+            return new If(condition, body);
+        }
         if(peek().type == LPAREN) {
             consume(LPAREN, "");
             const std::vector<Expression*> args = parseArgs(findEndParen());
                 
             consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
             consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
-
             return new CallStatement(Identifier{id}, args);
         } else if(peek().type == ASSIGN) {
             consume(ASSIGN, "");

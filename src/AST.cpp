@@ -1,18 +1,30 @@
 #include "AST.hpp"
 #include "OpCode.hpp"
+#include "ScratchAllocator.h"
 
+#include <array>
 #include <cstddef>
 #include <stack>
 #include <string>
+#include <utility>
 #include <vector>
 #include <iostream>
 
-const std::string GPREGS[] = {"rbx", "r10", "r11", "r12", "r13", "r14", "r15", "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-const std::string GPREGS8[] = {"bl", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b", "al", "dil", "sil", "dl", "cl", "r8b", "r9b"};
-const std::string GPREGS16[] = {"bx", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w", "ax", "di", "si", "dx", "cx", "r8w", "r9w"};
-const std::string GPREGS32[] = {"ebx", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d", "eax", "edi", "esi", "edx", "ecx", "r8d", "r9d"};
+const std::string GPREGS[] =    {"rbx", "r10",  "r11",  "r12",  "r13",  "r14",  "r15", 
+                                 "rax", "rdi",  "rsi", "rdx", "rcx", "r8",  "r9"};
 
-bool used_regs[6] = {false, false, false, false, false, false};
+const std::string GPREGS8[] =   {"bl",  "r10b", "r11b", "r12b", "r13b", "r14b", "r15b", 
+                                 "al",  "dil",  "sil", "dl",  "cl",  "r8b", "r9b"};
+
+const std::string GPREGS16[] =  {"bx",  "r10w", "r11w", "r12w", "r13w", "r14w", "r15w", 
+                                 "ax",  "di",   "si",  "dx",  "cx",  "r8w", "r9w"};
+
+const std::string GPREGS32[] =  {"ebx", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d", 
+                                 "eax", "edi",  "esi", "edx", "ecx", "r8d", "r9d"};
+
+const int FIRST_ARG = 7;
+
+std::array<bool, 7> usedRegs = {false, false, false, false, false, false, false};
 
 void IntLit::accept(Visitor* visitor, int reg) {
     visitor->visitIntLit(this, reg);
@@ -45,6 +57,14 @@ void EndCompound::accept(Visitor* visitor) {
     visitor->visitEndCompound(this);
 }
 
+void If::accept(Visitor* visitor) {
+    visitor->visitIf(this);
+}
+
+void IfElse::accept(Visitor* visitor) {
+    visitor->visitIfElse(this);
+}
+
 void Return::accept(Visitor* visitor) {
     visitor->visitReturn(this);
 }
@@ -72,7 +92,6 @@ void While::accept(Visitor* visitor)
 
 void FunctionDefinition::accept(Visitor* visitor) {
     visitor->visitFunctionDefinition(this);
-    body->accept(visitor);
 }
 
 void Program::accept(Visitor* visitor) {
@@ -135,6 +154,7 @@ void ConstExprVisitor::visitBinaryExpression(BinaryExpression* expr, int reg) {
 void ConstExprVisitor::visitCompound(Compound* stmt) {}
 void ConstExprVisitor::visitEndCompound(EndCompound* stmt) {}
 void ConstExprVisitor::visitIf(If* stmt) {}
+void ConstExprVisitor::visitIfElse(IfElse* stmt) {}
 
 void ConstExprVisitor::visitReturn(Return* stmt) {
     if(stack.top().has_value())
@@ -198,10 +218,11 @@ void CodeGenVisitor::visitStringLit(StringLit* expr, const int reg) {
 void CodeGenVisitor::visitIdExpression(IdExpression* expr, const int reg) {
     if(parameters.find(expr->id.name) != parameters.cend()) {
         auto [type, index] = parameters.find(expr->id.name)->second;
-        const int off = static_cast<int>(parameters.size()) - index;
 
-        textSegment.push_back(new Move(GPREGS[reg], "qword [rbp + " + std::to_string(off*8+8) + "]"));
-        deref(expr->derefDepth, GPREGS[reg]);
+        if(reg != index+FIRST_ARG+1) {
+            textSegment.push_back(new Move(GPREGS[reg], GPREGS[index+FIRST_ARG+1]));
+            deref(expr->derefDepth, GPREGS[reg]);
+        }
 
         if (expr->derefDepth == type.ptrDepth) {
             makeType(type.type, reg);
@@ -235,48 +256,48 @@ void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr, const int reg
     else if(expr->op == BinaryOperator::DIV) {
         textSegment.push_back(new Div(GPREGS[reg], allocator.getReg(r)));
     }
-    else if (expr->op == BinaryOperator::NEQUALS) {
-        textSegment.push_back(new NotEqual(GPREGS[reg], allocator.getReg(r)));
+    else {
+        textSegment.push_back(new Comparison(GPREGS[reg], allocator.getReg(r), expr->op));
     }
     allocator.free(r);
 
     deref(expr->derefDepth, GPREGS[reg]);
 }
 
-// rdi: 1st param
-// rsi: 2nd param
-// rdx: 3rd param
-// rcx: 4th param
-// r8:  5th param
-// r9:  6th param
-
 void CodeGenVisitor::visitCallExpression(CallExpression* expr, int reg) {
-    if(expr->id.name == "syscall") {
-        expr->args.at(0)->accept(this, 7);
+    for(int i = 0; i < std::size(usedRegs); i++) {
+        if(usedRegs[i]) push(GPREGS[i+FIRST_ARG]);
+    }
+    usedRegStack.push(usedRegs);
+    for(bool& b : usedRegs) b = false;
 
-        for (int i = 8; i < expr->args.size(); i++)
+    if(expr->id.name == "syscall") {
+        for (int i = 0; i < expr->args.size(); i++)
         {
-            expr->args.at(i)->accept(this, i);
+            expr->args.at(i)->accept(this, i+FIRST_ARG);
+            usedRegs[i] = true;
         }
 
         textSegment.push_back(new Syscall());
     } else {
-        int r = allocator.allocate();
-        for (Expression* arg : expr->args)
-        {
-            arg->accept(this, r);
-            push(allocator.getReg(r));
-        }
-        textSegment.push_back(new Call(expr->id.name));
         for (int i = 0; i < expr->args.size(); i++)
         {
-            pop(allocator.getReg(r));
+            auto arg = expr->args.at(i);
+            arg->accept(this, i+FIRST_ARG+1);
+            usedRegs[i+1] = true;
         }
+        textSegment.push_back(new Call(expr->id.name));
+    }
 
-        if (reg != 7)
-            textSegment.push_back(new Move(GPREGS[reg], "rax"));
+    if (reg != 7)
+        textSegment.push_back(new Move(GPREGS[reg], "rax"));
 
-        allocator.free(r);
+    std::swap(usedRegs, usedRegStack.top());
+    usedRegStack.pop();
+    for(int i = std::size(usedRegs)-1; i >= 0; i--) {
+        if(usedRegs[i]) {
+            pop(GPREGS[i+FIRST_ARG]);
+        }
     }
 }
 
@@ -288,19 +309,54 @@ void CodeGenVisitor::visitEndCompound(EndCompound* stmt) {
     current = current->getParent();
 }
 
-void CodeGenVisitor::visitIf(If* stmt) {}
+void CodeGenVisitor::visitIf(If* stmt) {
+    int reg = allocator.allocate();
+    int index = ifIndex++;
+
+    stmt->condition->accept(this, reg);
+    textSegment.push_back(new Compare(GPREGS[reg], "0"));
+    textSegment.push_back(new Jump("je", "If" + std::to_string(index) + "_End"));
+    stmt->body->accept(this);
+    textSegment.push_back(new Label("If" + std::to_string(index) + "_End"));
+}
+
+void CodeGenVisitor::visitIfElse(IfElse* stmt) {
+    int reg = allocator.allocate();
+    int index = ifIndex++;
+
+    stmt->condition->accept(this, reg);
+    textSegment.push_back(new Compare(GPREGS[reg], "0"));
+    textSegment.push_back(new Jump("je", "If" + std::to_string(index) + "_Else"));
+    stmt->ifBody->accept(this);
+    textSegment.push_back(new Jump("jmp","If" + std::to_string(index) + "_End"));
+    textSegment.push_back(new Label("If" + std::to_string(index) + "_Else"));
+    stmt->elseBody->accept(this);
+    textSegment.push_back(new Label("If" + std::to_string(index) + "_End"));
+}
 
 void CodeGenVisitor::visitReturn(Return* stmt) {
     if(func.top()->returnType.type != TypeIdentifierType::VOID) {
         stmt->value->accept(this, 7);
     }
+
+    int r = allocator.allocate();
+    for(int i = 0; i < func.top()->args.size(); i++) {
+        pop(allocator.getReg(r));
+    }
+    allocator.free(r);
+
+    bool* wasUsed = allocator.getWasUsed();
+
+    for(int i = std::size(REGS)-1; i >= 0; i--) {
+        if(wasUsed[i]) {
+            pop(REGS[i]);
+        }
+    }
+
     textSegment.push_back(new Move("rsp", "rbp"));
     textSegment.push_back(new Pop("rbp"));
     offset = 0;
     textSegment.push_back(new ReturnOp());
-
-    offset = offsetStack.top();
-    offsetStack.pop();
 
     if(!parameterStack.empty()) {
         parameters = parameterStack.top();
@@ -310,50 +366,37 @@ void CodeGenVisitor::visitReturn(Return* stmt) {
 }
 
 void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {
-    int r = allocator.allocate();
-    if(stmt->id.name == "syscall") {
-        std::cout << r << std::endl;
-        stmt->arguments.at(0)->accept(this, r);
-        push(allocator.getReg(r));
-        stmt->arguments.at(1)->accept(this, r);
-        push(allocator.getReg(r));
-        stmt->arguments.at(2)->accept(this, r);
-        push(allocator.getReg(r));
-        stmt->arguments.at(3)->accept(this, r);
-        push(allocator.getReg(r));
-        stmt->arguments.at(4)->accept(this, r);
-        push(allocator.getReg(r));
-        stmt->arguments.at(6)->accept(this, r);
-        push(allocator.getReg(r));
-        stmt->arguments.at(5)->accept(this, r);
-        push(allocator.getReg(r));
+    for(int i = 0; i < std::size(usedRegs); i++) {
+        if(usedRegs[i]) push(GPREGS[i+FIRST_ARG]);
+    }
+    usedRegStack.push(usedRegs);
+    for(bool& b : usedRegs) b = false;
 
-        pop("r9");
-        pop("r8");
-        pop("rcx");
-        pop("rdx");
-        pop("rsi");
-        pop("rdi");
-        pop("rax");
+    if(stmt->id.name == "syscall") {
+        for (int i = 0; i < stmt->arguments.size(); i++)
+        {
+            stmt->arguments.at(i)->accept(this, i+FIRST_ARG);
+            usedRegs[i] = true;
+        }
 
         textSegment.push_back(new Syscall());
     } else {
-        for (Expression* expr : stmt->arguments)
-        {
-            expr->accept(this, r);
-            push(allocator.getReg(r));
-        }
-        textSegment.push_back(new Call(stmt->id.name));
-
         for (int i = 0; i < stmt->arguments.size(); i++)
         {
-            pop(allocator.getReg(r));
+            auto arg = stmt->arguments.at(i);
+            arg->accept(this, i+FIRST_ARG+1);
+            usedRegs[i+1] = true;
         }
+        textSegment.push_back(new Call(stmt->id.name));
     }
 
-    allocator.free(r);
-
-    //parameterStack.push(parameters);
+    std::swap(usedRegs, usedRegStack.top());
+    usedRegStack.pop();
+    for(int i = std::size(usedRegs)-1; i >= 0; i--) {
+        if(usedRegs[i]) {
+            pop(GPREGS[i+FIRST_ARG]);
+        }
+    }
 }
 
 void CodeGenVisitor::visitVarAssignment(VarAssignment *stmt) {
@@ -406,7 +449,24 @@ void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {
     offsetStack.push(offset);
     offset = 0;
 
-    parameters = def->args;
+    CodeGenVisitor visit;
+    visit.setParams(def->args);
+    visit.pushFuncDef(def);
+
+    def->body->accept(&visit);
+    bool* wasUsed = visit.getScratchAlloctor()->getWasUsed();
+    for(int i = 0; i < std::size(REGS); i++) {
+        if(wasUsed[i]) {
+            push(GPREGS[i]);
+        }
+    }
+
+    for(auto op : visit.getTextSegment()) {
+        textSegment.push_back(op);
+    }
+    for(auto op : visit.getDataSegment()) {
+        dataSegment.push_back(op);
+    }
 
     func.push(def);
 }
@@ -455,6 +515,12 @@ void CodeGenVisitor::makeType(const TypeIdentifierType type, const int reg)
 }
 
 
+void CodeGenVisitor::setParams(std::map<std::string, FunctionDefinition::ParamData> p) {
+    for(auto arg : p) {
+        push(GPREGS[arg.second.index+FIRST_ARG+1]);
+        current->addVar(Identifier{arg.first}, {offset, arg.second.type});
+    }
+}
 
 std::stack<size_t> CodeGenVisitor::getStack() {
     return offsetStack;
