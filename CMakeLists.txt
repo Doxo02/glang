@@ -1,6 +1,7 @@
-cmake_minimum_required(VERSION 3.5.0)
-project(glang VERSION 1.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.31.1)
+project(glang VERSION 0.0.1 LANGUAGES CXX)
 
-add_executable(glang src/main.cpp src/Lexer.cpp src/Parser.cpp src/AST.cpp
-        src/ScratchAllocator.cpp
-        src/ScratchAllocator.h)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_executable(${PROJECT_NAME} src/main.cpp src/Lexer.cpp src/Parser.cpp src/AST.cpp src/ScratchAllocator.cpp)
