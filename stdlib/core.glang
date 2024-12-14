@@ -5,4 +5,9 @@ fn strlen(str: char*) -> i64 {
         c = *(str + i);
         i = i + 1;
     }
+    return i;
+}
+
+fn puts(str: char*) -> void {
+    syscall(1, 1, str, strlen(str), 0, 0, 0);
 }

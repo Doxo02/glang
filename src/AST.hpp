@@ -60,7 +60,7 @@ public:
     virtual ~Expression() = default;
     virtual std::string toString(int indentLevel) = 0;
 
-    virtual void accept(Visitor* visitor, std::string reg) = 0;
+    virtual void accept(Visitor* visitor, int reg) = 0;
 
     int derefDepth = 0;
 };
@@ -81,7 +81,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
     
     int value;
 };
@@ -102,7 +102,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
     
     std::string value;
 };
@@ -124,7 +124,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
 
     Identifier id;
 };
@@ -182,7 +182,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
 
     BinaryOperator op;
     Expression* left;
@@ -210,7 +210,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
 
     Identifier id;
     std::vector<Expression*> args;
@@ -521,11 +521,11 @@ private:
 class Visitor {
 public:
     virtual ~Visitor() = default;
-    virtual void visitIntLit(IntLit* expr, std::string reg) = 0;
-    virtual void visitStringLit(StringLit* expr, std::string reg) = 0;
-    virtual void visitIdExpression(IdExpression* expr, std::string reg) = 0;
-    virtual void visitBinaryExpression(BinaryExpression* expr, std::string reg) = 0;
-    virtual void visitCallExpression(CallExpression* expr, std::string reg) = 0;
+    virtual void visitIntLit(IntLit* expr, int reg) = 0;
+    virtual void visitStringLit(StringLit* expr, int reg) = 0;
+    virtual void visitIdExpression(IdExpression* expr, int reg) = 0;
+    virtual void visitBinaryExpression(BinaryExpression* expr, int reg) = 0;
+    virtual void visitCallExpression(CallExpression* expr, int reg) = 0;
 
     virtual void visitCompound(Compound* stmt) = 0;
     virtual void visitEndCompound(EndCompound* stmt) = 0;
@@ -543,10 +543,10 @@ public:
 
 class ConstExprVisitor : public Visitor {
 public:
-    void visitIntLit(IntLit* expr, std::string reg) override;
-    void visitStringLit(StringLit* expr, std::string reg) override;
-    void visitIdExpression(IdExpression* expr, std::string reg) override;
-    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
+    void visitIntLit(IntLit* expr, int reg) override;
+    void visitStringLit(StringLit* expr, int reg) override;
+    void visitIdExpression(IdExpression* expr, int reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, int reg) override;
 
     void visitCompound(Compound* stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
@@ -564,40 +564,15 @@ private:
     std::stack<std::optional<int>> stack;
 };
 
-class CountVarDeclVisitor : public Visitor {
-public:
-    CountVarDeclVisitor();
-    void visitIntLit(IntLit* expr, std::string reg) override;
-    void visitStringLit(StringLit* expr, std::string reg) override;
-    void visitIdExpression(IdExpression* expr, std::string reg) override;
-    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
-
-    void visitCompound(Compound *stmt) override;
-    void visitEndCompound(EndCompound* stmt) override;
-    void visitIf(If* stmt) override;
-    void visitReturn(Return* stmt) override;
-    void visitCallStatement(CallStatement* stmt) override;
-    void visitVarAssignment(VarAssignment* stmt) override;
-    void visitVarDeclaration(VarDeclaration* stmt) override;
-    void visitVarDeclAssign(VarDeclAssign* stmt) override;
-
-    void visitFunctionDefinition(FunctionDefinition* def) override;
-    void visitProgram(Program* prog) override;
-
-    [[nodiscard]] int getNumVarDecls() const;
-private:
-    int varDecls = 0;
-};
-
 class CodeGenVisitor final : public Visitor {
 public:
     CodeGenVisitor();
 
-    void visitIntLit(IntLit* expr, std::string reg) override;
-    void visitStringLit(StringLit* expr, std::string reg) override;
-    void visitIdExpression(IdExpression* expr, std::string reg) override;
-    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
-    void visitCallExpression(CallExpression* expr, std::string reg) override;
+    void visitIntLit(IntLit* expr, int reg) override;
+    void visitStringLit(StringLit* expr, int reg) override;
+    void visitIdExpression(IdExpression* expr, int reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, int reg) override;
+    void visitCallExpression(CallExpression* expr, int reg) override;
 
     void visitCompound(Compound *stmt) override;
     void visitEndCompound(EndCompound* stmt) override;

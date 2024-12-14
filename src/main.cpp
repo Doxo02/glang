@@ -35,10 +35,9 @@ int main(int argc, char** argv) {
     //ConstExprVisitor cVisitor;
     //program->accept(&cVisitor);
 
-    printParseTree(program);
+    //printParseTree(program);
 
     CodeGenVisitor visitor;
-
 
     program->accept(&visitor);
 

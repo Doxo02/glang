@@ -1,6 +1,6 @@
 import("stdlib/core");
 
 fn main(argc: i64, argv: char**) -> i32 {
-    puts(*(argv+8));
+    puts(*argv);
     return 0;
 }
