@@ -5,6 +5,7 @@
 #include <stack>
 #include <string>
 #include <vector>
+#include <iostream>
 
 const std::string GPREGS[] = {"rbx", "r10", "r11", "r12", "r13", "r14", "r15", "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 const std::string GPREGS8[] = {"bl", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b", "al", "dil", "sil", "dl", "cl", "r8b", "r9b"};
@@ -121,7 +122,14 @@ void ConstExprVisitor::visitBinaryExpression(BinaryExpression* expr, int reg) {
         case BinaryOperator::DIV:
             stack.emplace(left / right);
             break;
-    }
+        case BinaryOperator::EQUALS:
+        case BinaryOperator::NEQUALS:
+        case BinaryOperator::LESS:
+        case BinaryOperator::GREATER:
+        case BinaryOperator::LEQUALS:
+        case BinaryOperator::GEQUALS:
+          break;
+        }
 }
 
 void ConstExprVisitor::visitCompound(Compound* stmt) {}
