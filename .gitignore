@@ -1,6 +1,11 @@
 build/*
+cmake-build-debug/*
+cmake-build-release/*
+
 CMakePresets.json
 .vscode/*
+.idea/*
+
 examples/*.asm
 examples/*.o
 examples/*.out
