@@ -1,5 +1,6 @@
 #include "Parser.hpp"
 
+#include <cstddef>
 #include <fstream>
 
 #include "AST.hpp"
@@ -52,8 +53,7 @@ std::map<std::string, FunctionDefinition::ParamData> Parser::parseParameters() {
 }
 
 Program* Parser::parse() {
-    std::vector<FunctionDefinition*> defs;
-    std::vector<VarDeclaration*> decls;
+    auto* program = new Program();
     while(counter < tokens.size()) {
         if(std::string str = consumeString().value(); str == "fn") {
             if(peek().type != IDENTIFIER) {
@@ -77,14 +77,14 @@ Program* Parser::parse() {
 
             Statement* body = parseStatement(true);
 
-            defs.push_back(new FunctionDefinition(id, body, type, args));
+            program->functions.push_back(new FunctionDefinition(id, body, type, args));
         }
         else if(str == "let") {
             const Identifier id{consumeString().value()};
             consume(COLON, std::to_string(peek().line) + ": expected ':' but found: " + peek().toString());
             const auto type = TypeIdentifier{strToTypeId(consumeString().value())};
             consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
-            decls.push_back(new VarDeclaration(id, type));
+            program->declarations.push_back(new VarDeclaration(id, type));
         }
         else if (str == "import") {
             consume(LPAREN, std::to_string(peek().line) + ": expected '(' but found: " + peek().toString());
@@ -95,6 +95,11 @@ Program* Parser::parse() {
             std::string path = consumeString().value();
             consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
             consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
+
+            if (path.find(".glang") == std::string::npos) {
+                path.append(".glang");
+            }
+
             std::fstream file(path);
             std::string line;
             unsigned int number = 1;
@@ -104,12 +109,13 @@ Program* Parser::parse() {
             }
             file.close();
             Parser parser(lexer.getTokens());
-            Program* program = parser.parse();
-            for (FunctionDefinition* def : program->functions) {
-                defs.push_back(def);
+            Program* import_prog = parser.parse();
+
+            for (FunctionDefinition* def : import_prog->functions) {
+                program->functions.push_back(def);
             }
-            for (VarDeclaration* decl : program->declarations) {
-                decls.push_back(decl);
+            for (VarDeclaration* decl : import_prog->declarations) {
+                program->declarations.push_back(decl);
             }
         }
         else {
@@ -117,8 +123,8 @@ Program* Parser::parse() {
             exit(EXIT_FAILURE);
         }
     }
-
-    return new Program{decls, defs};
+  
+    return program;
 }
 
 Statement* Parser::parseStatement(const bool funcBody) {
@@ -181,13 +187,24 @@ Statement* Parser::parseStatement(const bool funcBody) {
             Statement* body = parseStatement();
             return new While(condition, body);
         }
+        if(id == "if") {
+            consume(LPAREN, std::to_string(peek().line) + ": expected '(' but found: " + peek().toString());
+            Expression* condition = parseExpression(findEndParen());
+            consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
+            Statement* body = parseStatement();
+            if(peek().type == IDENTIFIER && peek().stringValue.value() == "else") {
+                consume(IDENTIFIER, "");
+                Statement* elseBody = parseStatement();
+                return new IfElse(condition, body, elseBody);
+            }
+            return new If(condition, body);
+        }
         if(peek().type == LPAREN) {
             consume(LPAREN, "");
             const std::vector<Expression*> args = parseArgs(findEndParen());
                 
             consume(RPAREN, std::to_string(peek().line) + ": expected ')' but found: " + peek().toString());
             consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
-
             return new CallStatement(Identifier{id}, args);
         } else if(peek().type == ASSIGN) {
             consume(ASSIGN, "");

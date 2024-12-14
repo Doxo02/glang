@@ -116,12 +116,14 @@ void Lexer::passLine(const std::string& line, const unsigned int number) {
                         i++;
                     } else
                         tokens.push_back(Token{GREATER, number});
+                    break;
                 case '<':
                     if(line.at(i+1) == '=') {
                         tokens.push_back(Token{LEQUALS, number});
                         i++;
                     } else
                         tokens.push_back(Token{LESS, number});
+                    break;
                 case '!':
                     if (line.at(i+1) == '=') {
                         tokens.push_back(Token{NEQUALS, number});

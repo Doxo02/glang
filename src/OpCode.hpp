@@ -143,6 +143,10 @@ private:
     std::string second;
 };
 
+enum class BinaryOperator {
+    PLUS, MINUS, MUL, DIV, EQUALS, NEQUALS, LESS, GREATER, LEQUALS, GEQUALS
+};
+
 class Add final : public OpCode {
 public:
     Add(const std::string& first, const std::string& second) {
@@ -245,13 +249,16 @@ private:
     std::string second;
 };
 
-class NotEqual final : public OpCode
+class Comparison final : public OpCode
 {
 public:
-    NotEqual(const std::string& first, const std::string& second) {
+
+    Comparison(const std::string& first, const std::string& second, BinaryOperator op) {
         this->first = first;
         this->second = second;
+        this->op = op;
     }
+
     std::string genNasm() override
     {
         std::string out = "\tmov rcx, 0\n";
@@ -260,14 +267,46 @@ public:
         out.append(first);
         out.append(", ");
         out.append(second);
-        out.append("\n\tcmovne rcx, rdx\n");
-        out.append("\tmov rax, rcx");
+        out.append("\n\tcmov");
+
+        switch (op) {
+        case BinaryOperator::PLUS:
+        case BinaryOperator::MINUS:
+        case BinaryOperator::MUL:
+        case BinaryOperator::DIV:
+            break;
+        case BinaryOperator::EQUALS:
+            out.append("e");
+            break;
+        case BinaryOperator::NEQUALS:
+            out.append("ne");
+            break;
+        case BinaryOperator::LESS:
+            out.append("l");
+            break;
+        case BinaryOperator::GREATER:
+            out.append("g");
+            break;
+        case BinaryOperator::LEQUALS:
+            out.append("le");
+            break;
+        case BinaryOperator::GEQUALS:
+            out.append("ge");
+            break;
+          break;
+        }
+
+        out.append(" rcx, rdx\n");
+        out.append("\tmov ");
+        out.append(first);
+        out.append(", rcx");
         return out;
     }
 
 private:
     std::string first;
     std::string second;
+    BinaryOperator op;
 };
 
 class Syscall final : public OpCode {

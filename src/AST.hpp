@@ -1,8 +1,8 @@
 #ifndef AST_HPP
 #define AST_HPP
 
+#include <array>
 #include <cstddef>
-#include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -10,15 +10,12 @@
 #include <stack>
 
 #include "OpCode.hpp"
+#include "ScratchAllocator.h"
 
 class Visitor;
 
 enum class TypeIdentifierType {
     I8, I16, I32, I64, VOID, CHAR, F32, F64, BOOL
-};
-
-enum class BinaryOperator {
-    PLUS, MINUS, MUL, DIV, EQUALS, NEQUALS, LESS, GREATER, LEQUALS, GEQUALS
 };
 
 inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
@@ -59,7 +56,7 @@ public:
     virtual ~Expression() = default;
     virtual std::string toString(int indentLevel) = 0;
 
-    virtual void accept(Visitor* visitor, std::string reg) = 0;
+    virtual void accept(Visitor* visitor, int reg) = 0;
 
     int derefDepth = 0;
 };
@@ -80,7 +77,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
     
     int value;
 };
@@ -101,7 +98,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
     
     std::string value;
 };
@@ -123,7 +120,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
 
     Identifier id;
 };
@@ -181,7 +178,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
 
     BinaryOperator op;
     Expression* left;
@@ -209,7 +206,7 @@ public:
         return out;
     }
 
-    void accept(Visitor* visitor, std::string reg) override;
+    void accept(Visitor* visitor, int reg) override;
 
     Identifier id;
     std::vector<Expression*> args;
@@ -261,10 +258,69 @@ public:
     void accept(Visitor* visitor) override;
 };
 
-class If : Statement {
+class If : public Statement {
 public:
+    If(Expression* condition, Statement* body) {
+        this->condition = condition;
+        this->body = body;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out;
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("If:\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("Condition:\n");
+        out.append(condition->toString(indentLevel+2));
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("IfBody:\n");
+        out.append(body->toString(indentLevel+2));
+
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
     Expression* condition;
     Statement* body;
+};
+
+class IfElse : public Statement {
+public:
+    IfElse(Expression* condition, Statement* ifBody, Statement* elseBody) {
+        this->condition = condition;
+        this->ifBody = ifBody;
+        this->elseBody = elseBody;
+    }
+
+    std::string toString(int indentLevel) override {
+        std::string out;
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("IfElse:\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("Condition:\n");
+        out.append(condition->toString(indentLevel+2));
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("IfBody:\n");
+        out.append(ifBody->toString(indentLevel+2));
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("\n");
+        for(int i = 0; i < indentLevel+1; i++) out.append("  ");
+        out.append("ElseBody:\n");
+        out.append(elseBody->toString(indentLevel+2));
+
+        return out;
+    }
+
+    void accept(Visitor* visitor) override;
+
+    Expression* condition;
+    Statement* ifBody;
+    Statement* elseBody;
 };
 
 class Return final : public Statement {
@@ -481,6 +537,7 @@ public:
 
     std::vector<VarDeclaration*> declarations;
     std::vector<FunctionDefinition*> functions;
+    std::vector<std::string> imports;
 };
 
 struct Var {
@@ -519,15 +576,16 @@ private:
 class Visitor {
 public:
     virtual ~Visitor() = default;
-    virtual void visitIntLit(IntLit* expr, std::string reg) = 0;
-    virtual void visitStringLit(StringLit* expr, std::string reg) = 0;
-    virtual void visitIdExpression(IdExpression* expr, std::string reg) = 0;
-    virtual void visitBinaryExpression(BinaryExpression* expr, std::string reg) = 0;
-    virtual void visitCallExpression(CallExpression* expr, std::string reg) = 0;
+    virtual void visitIntLit(IntLit* expr, int reg) = 0;
+    virtual void visitStringLit(StringLit* expr, int reg) = 0;
+    virtual void visitIdExpression(IdExpression* expr, int reg) = 0;
+    virtual void visitBinaryExpression(BinaryExpression* expr, int reg) = 0;
+    virtual void visitCallExpression(CallExpression* expr, int reg) = 0;
 
     virtual void visitCompound(Compound* stmt) = 0;
     virtual void visitEndCompound(EndCompound* stmt) = 0;
     virtual void visitIf(If* stmt) = 0;
+    virtual void visitIfElse(IfElse* stmt) = 0;
     virtual void visitReturn(Return* stmt) = 0;
     virtual void visitCallStatement(CallStatement* stmt) = 0;
     virtual void visitVarAssignment(VarAssignment* stmt) = 0;
@@ -541,14 +599,15 @@ public:
 
 class ConstExprVisitor : public Visitor {
 public:
-    void visitIntLit(IntLit* expr, std::string reg) override;
-    void visitStringLit(StringLit* expr, std::string reg) override;
-    void visitIdExpression(IdExpression* expr, std::string reg) override;
-    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
+    void visitIntLit(IntLit* expr, int reg) override;
+    void visitStringLit(StringLit* expr, int reg) override;
+    void visitIdExpression(IdExpression* expr, int reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, int reg) override;
 
     void visitCompound(Compound* stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
     void visitIf(If* stmt) override;
+    void visitIfElse(IfElse* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
     void visitVarAssignment(VarAssignment* stmt) override;
@@ -562,44 +621,20 @@ private:
     std::stack<std::optional<int>> stack;
 };
 
-class CountVarDeclVisitor : public Visitor {
-public:
-    CountVarDeclVisitor();
-    void visitIntLit(IntLit* expr, std::string reg) override;
-    void visitStringLit(StringLit* expr, std::string reg) override;
-    void visitIdExpression(IdExpression* expr, std::string reg) override;
-    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
-
-    void visitCompound(Compound *stmt) override;
-    void visitEndCompound(EndCompound* stmt) override;
-    void visitIf(If* stmt) override;
-    void visitReturn(Return* stmt) override;
-    void visitCallStatement(CallStatement* stmt) override;
-    void visitVarAssignment(VarAssignment* stmt) override;
-    void visitVarDeclaration(VarDeclaration* stmt) override;
-    void visitVarDeclAssign(VarDeclAssign* stmt) override;
-
-    void visitFunctionDefinition(FunctionDefinition* def) override;
-    void visitProgram(Program* prog) override;
-
-    [[nodiscard]] int getNumVarDecls() const;
-private:
-    int varDecls = 0;
-};
-
 class CodeGenVisitor final : public Visitor {
 public:
     CodeGenVisitor();
 
-    void visitIntLit(IntLit* expr, std::string reg) override;
-    void visitStringLit(StringLit* expr, std::string reg) override;
-    void visitIdExpression(IdExpression* expr, std::string reg) override;
-    void visitBinaryExpression(BinaryExpression* expr, std::string reg) override;
-    void visitCallExpression(CallExpression* expr, std::string reg) override;
+    void visitIntLit(IntLit* expr, int reg) override;
+    void visitStringLit(StringLit* expr, int reg) override;
+    void visitIdExpression(IdExpression* expr, int reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, int reg) override;
+    void visitCallExpression(CallExpression* expr, int reg) override;
 
     void visitCompound(Compound *stmt) override;
     void visitEndCompound(EndCompound* stmt) override;
     void visitIf(If* stmt) override;
+    void visitIfElse(IfElse* stmt) override;
     void visitReturn(Return* stmt) override;
     void visitCallStatement(CallStatement* stmt) override;
     void visitVarAssignment(VarAssignment* stmt) override;
@@ -615,12 +650,17 @@ public:
     std::vector<OpCode*> getDataSegment();
     std::vector<OpCode*> getTextSegment();
 
+    ScratchAllocator* getScratchAlloctor() { return &allocator; }
+    void setParams(std::map<std::string, FunctionDefinition::ParamData> p);
+
+    void pushFuncDef(FunctionDefinition* funcDef) { func.push(funcDef); }
+
 private:
     void push(const std::string& what, size_t bytes);
     void pop(const std::string& where, size_t bytes);
 
     void deref(int depth, const std::string& reg);
-    void makeType(TypeIdentifierType type);
+    void makeType(TypeIdentifierType type, int reg);
 
     Scope* root;
     Scope* current;
@@ -628,6 +668,7 @@ private:
     std::stack<FunctionDefinition*> func;
     std::stack<size_t> offsetStack;
     std::stack<std::map<std::string, FunctionDefinition::ParamData>> parameterStack;
+    std::stack<std::array<bool, 7>> usedRegStack;
 
     std::map<std::string, FunctionDefinition::ParamData> parameters;
 
@@ -636,8 +677,11 @@ private:
 
     int stringIndex = 0;
     int whileIndex = 0;
+    int ifIndex = 0;
 
     size_t offset = 0;
+
+    ScratchAllocator allocator;
 };
 
 #endif
