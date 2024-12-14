@@ -1,6 +1,5 @@
 default_target: run
 
-
 run: test.out
 	./examples/test.out
 
@@ -13,8 +12,5 @@ test.o: test.asm
 test.asm: build-compiler
 	./build/glang examples/test.glang
 
-build-compiler: cmake
+build-compiler:
 	(cd build && make)
-
-cmake:
-	cmake . -B build
