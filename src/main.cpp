@@ -10,14 +10,20 @@ void printParseTree(Program* program);
 
 int main(int argc, char** argv) {
     bool asLib = false;
+    bool core = true;
 
     if(argc < 2) {
         std::cout << "Usage: glang <source_file>" << std::endl;
         return EXIT_FAILURE;
     }
     if(argc > 2) {
-        if(std::string(argv[2]).compare("-L") == 0) {
-            asLib = true;
+        for(int i = 2; i < argc; i++) {
+            if(std::string(argv[i]).compare("-L") == 0) {
+                asLib = true;
+            }
+            if(std::string(argv[i]).compare("--no-core") == 0) {
+                core = false;
+            }
         }
     }
 
@@ -35,9 +41,13 @@ int main(int argc, char** argv) {
 
     std::string outFileName = fileName.replace(fileName.find(".glang"), 6, ".asm");
 
-    Parser parser(lexer.getTokens());
+    Parser parser(lexer.getTokens(), core);
 
     Program* program = parser.parse();
+
+    for(auto glob : program->externVars) {
+        std::cout << glob.first << std::endl;
+    }
 
     //ConstExprVisitor cVisitor;
     //program->accept(&cVisitor);

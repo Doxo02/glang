@@ -368,9 +368,10 @@ private:
 
 class DefineVar final : public OpCode {
 public:
-    DefineVar(const std::string& id, const std::string& type) {
+    DefineVar(const std::string& id, const std::string& type, const std::string& value) {
         this->id = id;
         this->type = type;
+        this->value = value;
     }
 
     std::string genNasm() override {
@@ -378,12 +379,14 @@ public:
         out.append(id);
         out.append(": ");
         out.append(type);
-        out.append(" 0");
+        out.append(" ");
+        out.append(value);
         return out;
     }
 private:
     std::string id;
     std::string type;
+    std::string value;
 };
 
 #endif

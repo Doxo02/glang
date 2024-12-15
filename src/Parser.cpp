@@ -15,8 +15,9 @@
 
 #include "Lexer.hpp"
 
-Parser::Parser(std::vector<Token> tokens) {
+Parser::Parser(std::vector<Token> tokens, bool core) {
     this->tokens = std::move(tokens);
+    this->core = core;
 }
 
 std::map<std::string, FunctionDefinition::ParamData> Parser::parseParameters() {
@@ -54,6 +55,33 @@ std::map<std::string, FunctionDefinition::ParamData> Parser::parseParameters() {
 
 Program* Parser::parse() {
     auto* program = new Program();
+
+    // import core
+    if(core) {
+        std::fstream file("stdlib/core.glang");
+        std::string line;
+        unsigned int number = 1;
+        Lexer lexer;
+        while(std::getline(file, line)) {
+            lexer.passLine(line, number++);
+        }
+        file.close();
+        Parser parser(lexer.getTokens(), false);
+        Program* import_prog = parser.parse();
+
+        for (FunctionDefinition* def : import_prog->functions) {
+            program->addExtern(def->id.name);
+        }
+        for (VarDeclaration* decl : import_prog->declarations) {
+            program->addExtern(decl->id.name, decl->type);
+            program->addExtern(decl->id.name);
+        }
+        for(VarDeclAssign* decl : import_prog->declAssigns) {
+            program->addExtern(decl->id.name, decl->type);
+            program->addExtern(decl->id.name);
+        }
+    }
+
     while(counter < tokens.size()) {
         if(std::string str = consumeString().value(); str == "fn") {
             if(peek().type != IDENTIFIER) {
@@ -83,8 +111,15 @@ Program* Parser::parse() {
             const Identifier id{consumeString().value()};
             consume(COLON, std::to_string(peek().line) + ": expected ':' but found: " + peek().toString());
             const auto type = TypeIdentifier{strToTypeId(consumeString().value())};
-            consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
-            program->declarations.push_back(new VarDeclaration(id, type));
+            if(peek().type == SEMI) {
+                consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
+                program->declarations.push_back(new VarDeclaration(id, type));
+            } else {
+                consume(ASSIGN, std::to_string(peek().line) + ": expected '=' but found: " + peek().toString());
+                Expression* expr = parseExpression(findNext(SEMI, tokens.size()));
+                consume(SEMI, std::to_string(peek().line) + ": expected ';' but found: " + peek().toString());
+                program->declAssigns.push_back(new VarDeclAssign(id, type, expr));
+            }
         }
         else if (str == "import") {
             consume(LPAREN, std::to_string(peek().line) + ": expected '(' but found: " + peek().toString());
@@ -108,7 +143,7 @@ Program* Parser::parse() {
                 lexer.passLine(line, number++);
             }
             file.close();
-            Parser parser(lexer.getTokens());
+            Parser parser(lexer.getTokens(), false);
             Program* import_prog = parser.parse();
 
             // for(std::string label : import_prog->externs) {
@@ -119,7 +154,12 @@ Program* Parser::parse() {
                 program->addExtern(def->id.name);
             }
             for (VarDeclaration* decl : import_prog->declarations) {
-                program->declarations.push_back(decl);
+                program->addExtern(decl->id.name, decl->type);
+                program->addExtern(decl->id.name);
+            }
+            for(VarDeclAssign* decl : import_prog->declAssigns) {
+                program->addExtern(decl->id.name, decl->type);
+                program->addExtern(decl->id.name);
             }
         }
         else {

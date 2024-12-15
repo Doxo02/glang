@@ -4,7 +4,9 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdlib>
 #include <stack>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -95,13 +97,16 @@ void FunctionDefinition::accept(Visitor* visitor) {
 }
 
 void Program::accept(Visitor* visitor) {
+    visitor->visitProgram(this);
     for(VarDeclaration* decl : declarations) {
+        decl->accept(visitor);
+    }
+    for(VarDeclAssign* decl : declAssigns) {
         decl->accept(visitor);
     }
     for(FunctionDefinition* def : functions) {
         def->accept(visitor);
     }
-    visitor->visitProgram(this);
 }
 
 // ConstExprVisitor implementation
@@ -202,6 +207,7 @@ CodeGenVisitor::CodeGenVisitor() {
     root = new Scope(nullptr);
     current = root;
     allocator = ScratchAllocator();
+    func.push(nullptr);
 }
 
 void CodeGenVisitor::visitIntLit(IntLit* expr, const int reg) {
@@ -228,14 +234,29 @@ void CodeGenVisitor::visitIdExpression(IdExpression* expr, const int reg) {
             makeType(type.type, reg);
         }
     } else {
-        const Var var = current->getVar(expr->id);
-        const int off = offset - var.offset;
+        if(current->getVar(expr->id) != nullptr) {
+            const Var* var = current->getVar(expr->id);
+            const int off = offset - var->offset;
 
-        textSegment.push_back(new Move(GPREGS[reg], "qword [rsp + " + std::to_string(off) + "]"));
-        deref(expr->derefDepth, GPREGS[reg]);
+            textSegment.push_back(new Move(GPREGS[reg], "qword [rsp + " + std::to_string(off) + "]"));
+            deref(expr->derefDepth, GPREGS[reg]);
 
-        if (expr->derefDepth == var.type.ptrDepth) {
-            makeType(var.type.type, reg);
+            if (expr->derefDepth == var->type.ptrDepth) {
+                makeType(var->type.type, reg);
+            }
+        } else {
+            if(globalVars.find(expr->id.name) != globalVars.cend()) {
+                auto type = globalVars.find(expr->id.name)->second;
+
+                textSegment.push_back(new Move(GPREGS[reg], "[" + expr->id.name + "]"));
+                deref(expr->derefDepth, GPREGS[reg]);
+
+                if (expr->derefDepth == type.ptrDepth) {
+                    makeType(type.type, reg);
+                }
+            } else {
+                throw std::runtime_error("can't resolve symbol: \"" + expr->id.name + "\"");
+            }
         }
     }
 }
@@ -400,28 +421,64 @@ void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {
 }
 
 void CodeGenVisitor::visitVarAssignment(VarAssignment *stmt) {
-    Var var = current->getVar(stmt->id);
     int r = allocator.allocate();
     stmt->value->accept(this, r);
-    if (var.type.ptrDepth == 0)
-    {
-        makeType(var.type.type, r);
+
+    if(current->getVar(stmt->id) != nullptr) {
+        Var* var = current->getVar(stmt->id);
+        if (var->type.ptrDepth == 0) {
+            makeType(var->type.type, r);
+        }
+        textSegment.push_back(new Move("[rsp + " + std::to_string(offset - var->offset) + "]", allocator.getReg(r)));
+    } else {
+        if(globalVars.find(stmt->id.name) != globalVars.cend()) {
+            auto type = globalVars.find(stmt->id.name)->second;
+            if(type.ptrDepth == 0) {
+                makeType(type.type, r);
+            }
+            textSegment.push_back(new Move("[" + stmt->id.name + "]", allocator.getReg(r)));
+        } else {
+            throw std::runtime_error("can't resolve symbol(VarAssignment): " + stmt->id.name);
+        }
     }
-    textSegment.push_back(new Move("[rsp + " + std::to_string(offset - var.offset) + "]", allocator.getReg(r)));
+
     allocator.free(r);
 }
 
 void CodeGenVisitor::visitVarDeclaration(VarDeclaration* stmt) {
-    push("qword 0");
-    current->addVar(stmt->id, Var{offset, stmt->type});
+    if(func.top() != nullptr) {
+        push("qword 0");
+        current->addVar(stmt->id, Var{offset, stmt->type});
+    } else {
+        dataSegment.push_back(new DefineVar(stmt->id.name, "dq", "0"));
+        globalVars.insert({stmt->id.name, stmt->type});
+        globals.push_back(stmt->id.name);
+    }
 }
 
 void CodeGenVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
-    int r = allocator.allocate();
-    stmt->value->accept(this, r);
-    push(allocator.getReg(r));
-    current->addVar(stmt->id, Var{offset, stmt->type});
-    allocator.free(r);
+    if(func.top() != nullptr) {
+        int r = allocator.allocate();
+        stmt->value->accept(this, r);
+        push(allocator.getReg(r));
+        current->addVar(stmt->id, Var{offset, stmt->type});
+        allocator.free(r);
+    } else {
+        IntLit* expr = dynamic_cast<IntLit*>(stmt->value);
+        StringLit* str = dynamic_cast<StringLit*>(stmt->value);
+        if(expr != nullptr) {
+            dataSegment.push_back(new DefineVar(stmt->id.name, "dq", std::to_string(expr->value)));
+            globalVars.insert({stmt->id.name, stmt->type});
+            globals.push_back(stmt->id.name);
+        } else if(str != nullptr) {
+            dataSegment.push_back(new DefineVar(stmt->id.name, "db", str->value));
+            globalVars.insert({stmt->id.name, stmt->type});
+            globals.push_back(stmt->id.name);
+        } else {
+            std::cerr << "Expected either IntLit or StringLit after global assign but found: " << stmt->value->toString(0) << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 void CodeGenVisitor::visitWhile(While* stmt)
@@ -453,6 +510,7 @@ void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {
     CodeGenVisitor visit;
     visit.setParams(def->args);
     visit.pushFuncDef(def);
+    visit.addGlobals(globalVars);
 
     def->body->accept(&visit);
     bool* wasUsed = visit.getScratchAlloctor()->getWasUsed();
@@ -472,7 +530,11 @@ void CodeGenVisitor::visitFunctionDefinition(FunctionDefinition *def) {
     func.push(def);
 }
 
-void CodeGenVisitor::visitProgram(Program* prog) {}
+void CodeGenVisitor::visitProgram(Program* prog) {
+    for(auto glob : prog->externVars) {
+        globalVars.insert(glob);
+    }
+}
 
 void CodeGenVisitor::deref(const int depth, const std::string& reg)
 {

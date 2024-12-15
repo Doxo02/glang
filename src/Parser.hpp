@@ -9,7 +9,7 @@
 
 class Parser {
 public:
-    explicit Parser(std::vector<Token> tokens);
+    explicit Parser(std::vector<Token> tokens, bool core = true);
     ~Parser() = default;
 
     Program* parse();
@@ -17,6 +17,7 @@ public:
 private:
     std::vector<Token> tokens;
     int counter = 0;
+    bool core;
 
     Statement* parseStatement(bool funcBody = false);
     std::vector<Expression*> parseArgs(int until);

@@ -1,7 +1,29 @@
-import("stdlib/core");
+let STDIN:  i32 = 0;
+let STDOUT: i32 = 1;
+let STDERR: i32 = 2;
 
-fn puts(str: char*) -> void {
-    syscall(1, 1, str, strlen(str), 0, 0, 0);
+fn sys_read(fd: i32, buf: char*, count: i64) -> i64 {
+    return syscall(0, fd, buf, count, 0, 0, 0);
+}
+
+fn sys_write(fd: i32, buf: char*, count: i64) -> i64 {
+    return syscall(1, fd, buf, count, 0, 0, 0);
+}
+
+fn sys_open(filename: char*, flags: i32, mode: i32) -> i64 {
+    return syscall(2, filename, flags, mode, 0, 0, 0);
+}
+
+fn sys_close(fd: i32) -> i64 {
+    return syscall(3, fd, 0, 0, 0, 0, 0);
+}
+
+fn sys_mmap(addr: i64, len: i64, prot: i64, flags: i64, fd: i64, off: i64) -> i64 {
+    return syscall(9, addr, len, prot, flags, fd, off);
+}
+
+fn sys_munmap(addr: i64, len: i64) -> i64 {
+    return syscall(11, addr, len, 0, 0, 0, 0);
 }
 
 fn sys_exit(code: i32) -> void {

@@ -22,10 +22,10 @@ linux.o: linux.asm
 	nasm -felf64 stdlib/linux.asm -o stdlib/linux.o
 
 core.asm: build-compiler
-	./build/glang stdlib/core.glang -L
+	./build/glang stdlib/core.glang -L --no-core
 
 linux.asm: build-compiler
-	./build/glang stdlib/linux.glang -L
+	./build/glang stdlib/linux.glang -L --no-core
 
 build-compiler:
 	(cd build && make)

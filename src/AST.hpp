@@ -534,7 +534,7 @@ public:
 class Program {
 public:
     void accept(Visitor* visitor);
-    
+
     inline void addExtern(std::string label) {
         externs.push_back(label);
     }
@@ -543,9 +543,15 @@ public:
         return externs;
     }
 
+    inline void addExtern(std::string label, TypeIdentifier type) {
+        externVars.insert({label, type});
+    }
+
     std::vector<VarDeclaration*> declarations;
+    std::vector<VarDeclAssign*> declAssigns;
     std::vector<FunctionDefinition*> functions;
     std::vector<std::string> externs;
+    std::map<std::string, TypeIdentifier> externVars;
 };
 
 struct Var {
@@ -568,12 +574,14 @@ public:
         vars.insert({id.name, info});
     }
 
-    Var getVar(const Identifier& id) {
+    Var* getVar(const Identifier& id) {
         if(vars.find(id.name) == vars.cend()) {
-            return parent->getVar(id);
+            if(parent != nullptr)
+                return parent->getVar(id);
+            return nullptr;
         }
 
-        return vars.find(id.name)->second;
+        return &vars.find(id.name)->second;
     }
 
 private:
@@ -661,6 +669,11 @@ public:
 
     ScratchAllocator* getScratchAlloctor() { return &allocator; }
     void setParams(std::map<std::string, FunctionDefinition::ParamData> p);
+    inline void addGlobals(std::map<std::string, TypeIdentifier> globals) {
+        for(auto pair : globals) {
+            globalVars.insert(pair);
+        }
+    }
 
     void pushFuncDef(FunctionDefinition* funcDef) { func.push(funcDef); }
 
@@ -680,6 +693,7 @@ private:
     std::stack<std::array<bool, 7>> usedRegStack;
 
     std::map<std::string, FunctionDefinition::ParamData> parameters;
+    std::map<std::string, TypeIdentifier> globalVars;
 
     std::vector<OpCode*> dataSegment;
     std::vector<OpCode*> textSegment;
