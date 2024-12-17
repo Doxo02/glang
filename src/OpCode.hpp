@@ -1,6 +1,7 @@
 #ifndef OPCODE_HPP
 #define OPCODE_HPP
 
+#include <cstdio>
 #include <string>
 
 inline void replaceAll(std::string& source, const std::string& from, const std::string& to)
@@ -99,6 +100,26 @@ private:
     std::string second;
 };
 
+class LoadEffectiveAddr final : public OpCode {
+public:
+    LoadEffectiveAddr(const std::string& first, const std::string& second) {
+        this->first = first;
+        this->second = second;
+    }
+
+    std::string genNasm() override {
+        std::string out = "\tlea ";
+        out.append(first);
+        out.append(", ");
+        out.append(second);
+        return out;
+    }
+
+private:
+    std::string first;
+    std::string second;
+};
+
 class Jump final : public OpCode
 {
 public:
@@ -144,14 +165,15 @@ private:
 };
 
 enum class BinaryOperator {
-    PLUS, MINUS, MUL, DIV, EQUALS, NEQUALS, LESS, GREATER, LEQUALS, GEQUALS
+    PLUS, MINUS, MUL, DIV, MOD, EQUALS, NEQUALS, LESS, GREATER, LEQUALS, GEQUALS, BIT_OR, BIT_AND
 };
 
 class Add final : public OpCode {
 public:
-    Add(const std::string& first, const std::string& second) {
+    Add(const std::string& first, const std::string& second, bool sign = false) {
         this->first = first;
         this->second = second;
+        this->sign = sign;
     }
 
     std::string genNasm() override {
@@ -165,13 +187,15 @@ public:
 private:
     std::string first;
     std::string second;
+    bool sign;
 };
 
 class Sub final : public OpCode {
 public:
-    Sub(const std::string& first, const std::string& second) {
+    Sub(const std::string& first, const std::string& second, bool sign = false) {
         this->first = first;
         this->second = second;
+        this->sign = sign;
     }
 
     std::string genNasm() override {
@@ -185,17 +209,59 @@ public:
 private:
     std::string first;
     std::string second;
+    bool sign;
 };
 
 class Multiply final : public OpCode {
 public:
-    Multiply(const std::string& first, const std::string& second) {
+    Multiply(const std::string& first, const std::string& second, bool sign = false) {
+        this->first = first;
+        this->second = second;
+        this->sign = sign;
+    }
+
+    std::string genNasm() override {
+        std::string out = sign ? "\timul " : "\tmul ";
+        out.append(first);
+        out.append(", ");
+        out.append(second);
+        return out;
+    }
+
+private:
+    std::string first;
+    std::string second;
+    bool sign;
+};
+
+class Div final : public OpCode {
+public:
+    Div(const std::string& first, bool sign = false) {
+        this->first = first;
+        this->sign = sign;
+    }
+
+    std::string genNasm() override {
+        std::string out = sign ? "\tidiv " : "\tdiv ";
+        out.append(first);
+        return out;
+    }
+
+private:
+    std::string first;
+    bool sign;
+};
+
+class OR final : public OpCode {
+public:
+    OR(const std::string& first, const std::string& second) {
         this->first = first;
         this->second = second;
     }
 
-    std::string genNasm() override {
-        std::string out = "\timul ";
+    std::string genNasm() override
+    {
+        std::string out = "\tor ";
         out.append(first);
         out.append(", ");
         out.append(second);
@@ -207,15 +273,16 @@ private:
     std::string second;
 };
 
-class Div final : public OpCode {
+class AND final : public OpCode {
 public:
-    Div(const std::string& first, const std::string& second) {
+    AND(const std::string& first, const std::string& second) {
         this->first = first;
         this->second = second;
     }
 
-    std::string genNasm() override {
-        std::string out = "\tidiv ";
+    std::string genNasm() override
+    {
+        std::string out = "\tor ";
         out.append(first);
         out.append(", ");
         out.append(second);
@@ -274,6 +341,8 @@ public:
         case BinaryOperator::MINUS:
         case BinaryOperator::MUL:
         case BinaryOperator::DIV:
+        case BinaryOperator::BIT_OR:
+        case BinaryOperator::BIT_AND:
             break;
         case BinaryOperator::EQUALS:
             out.append("e");
@@ -293,7 +362,8 @@ public:
         case BinaryOperator::GEQUALS:
             out.append("ge");
             break;
-          break;
+        case BinaryOperator::MOD:
+            break;
         }
 
         out.append(" rcx, rdx\n");

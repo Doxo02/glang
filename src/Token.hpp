@@ -8,6 +8,7 @@ enum TokType {
     INT_LIT,
     IDENTIFIER,
     STRING_LITERAL,
+    CHAR_LITERAL,
     SEMI,
     LPAREN,
     RPAREN,
@@ -20,6 +21,7 @@ enum TokType {
     MINUS,
     STAR,
     FSLASH,
+    MOD,
     COMMA,
     ASSIGN,
     COLON,
@@ -28,18 +30,15 @@ enum TokType {
     LESS,
     LEQUALS,
     GEQUALS,
-    NEQUALS
+    NEQUALS,
+    BIT_OR,
+    BIT_AND,
+    LOGIC_OR,
+    LOGIC_AND,
 };
 
-struct Token {
-    TokType type;
-    unsigned int line;
-    std::optional<int> intValue;
-    std::optional<std::string> stringValue;
-
-    [[nodiscard]] std::string toString() const
-    {
-        std::string out;
+inline std::string tokTypeToString(TokType type) {
+    std::string out;
 
         switch (type)
         {
@@ -51,6 +50,9 @@ struct Token {
             break;
         case STRING_LITERAL:
             out.append("STRING_LITERAL");
+            break;
+        case CHAR_LITERAL:
+            out.append("CHAR_LITERAL");
             break;
         case SEMI:
             out.append("SEMI");
@@ -115,15 +117,45 @@ struct Token {
         case NEQUALS:
             out.append("NEQUALS");
             break;
+        case BIT_OR:
+            out.append("BIT_OR");
+            break;
+        case BIT_AND:
+            out.append("BIT_AND");
+            break;
+        case LOGIC_OR:
+            out.append("LOGIC_OR");
+            break;
+        case LOGIC_AND:
+            out.append("LOGIC_AND");
+            break;
         default:
             out.append("");
         }
+    return out;
+}
+
+struct Token {
+    TokType type;
+    unsigned int line;
+    std::optional<int> intValue;
+    std::optional<std::string> stringValue;
+    std::optional<char> charValue;
+    int col;
+
+    [[nodiscard]] std::string toString() const
+    {
+        std::string out = tokTypeToString(type);
 
         if(intValue.has_value()) {
             out.append(": " + std::to_string(intValue.value()));
         }
         if(stringValue.has_value()) {
             out.append(": " + stringValue.value());
+        }
+        if(charValue.has_value()) {
+            out.append(": ");
+            out.append(std::string(1, charValue.value()));
         }
 
         return out;

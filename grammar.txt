@@ -9,6 +9,8 @@ type_ident := type | ('*')+type | type('['INT_LIT']')+
 declaration := ID ':' type_ident ';'
              | ID ':' type_ident '=' expression ';'
 
+assignment := expression '=' expression ';'
+
 statement := if_statement | return_statement | scope | call_statement | while_statemnt
 
 scope := '{' (statement)* '}'

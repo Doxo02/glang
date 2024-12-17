@@ -39,20 +39,18 @@ int main(int argc, char** argv) {
     }
     srcFile.close();
 
+    Parser parser(lexer.getTokens(), fileName, core);
+    
     std::string outFileName = fileName.replace(fileName.find(".glang"), 6, ".asm");
 
-    Parser parser(lexer.getTokens(), core);
-
     Program* program = parser.parse();
-
-    for(auto glob : program->externVars) {
-        std::cout << glob.first << std::endl;
-    }
 
     //ConstExprVisitor cVisitor;
     //program->accept(&cVisitor);
 
-    //printParseTree(program);
+    printParseTree(program);
+
+    std::cout << "Codegen..." << std::endl;
 
     CodeGenVisitor visitor;
 
@@ -60,6 +58,8 @@ int main(int argc, char** argv) {
 
     auto data = visitor.getDataSegment();
     auto text = visitor.getTextSegment();
+    auto bss = visitor.getBssSegment();
+    auto ro = visitor.getROSegment();
     auto globals = visitor.getGlobals();
     auto externs = program->getExterns();
 
@@ -88,9 +88,20 @@ int main(int argc, char** argv) {
         outFile << t->genNasm() << std::endl;
     }
 
-    outFile << "section .data" << std::endl;
+    outFile << std::endl << "section .data" << std::endl;
 
     for(auto d : data) {
+        outFile << d->genNasm() << std::endl;
+    }
+
+    outFile << std::endl << "section .bss" << std::endl;
+
+    for(auto d : bss) {
+        outFile << d->genNasm() << std::endl;
+    }
+
+    outFile << std::endl << "section .rodata" << std::endl;
+    for(auto d : ro) {
         outFile << d->genNasm() << std::endl;
     }
 

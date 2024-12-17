@@ -5,12 +5,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdlib>
+#include <ios>
 #include <stack>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 #include <iostream>
+#include <sstream>
 
 const std::string GPREGS[] =    {"rbx", "r10",  "r11",  "r12",  "r13",  "r14",  "r15", 
                                  "rax", "rdi",  "rsi", "rdx", "rcx", "r8",  "r9"};
@@ -34,6 +36,10 @@ void IntLit::accept(Visitor* visitor, int reg) {
 
 void StringLit::accept(Visitor* visitor, int reg)  {
     visitor->visitStringLit(this, reg);
+}
+
+void CharLit::accept(Visitor* visitor, int reg) {
+    visitor->visitCharLit(this, reg);
 }
 
 void IdExpression::accept(Visitor* visitor, int reg) {
@@ -119,6 +125,8 @@ void ConstExprVisitor::visitStringLit(StringLit* expr, int reg) {
     stack.emplace();
 }
 
+void ConstExprVisitor::visitCharLit(CharLit* expr, int reg) {}
+
 void ConstExprVisitor::visitIdExpression(IdExpression* expr, int reg) {
     stack.emplace();
 }
@@ -146,13 +154,18 @@ void ConstExprVisitor::visitBinaryExpression(BinaryExpression* expr, int reg) {
         case BinaryOperator::DIV:
             stack.emplace(left / right);
             break;
+        case BinaryOperator::MOD:
+            stack.emplace(left % right);
+            break;
         case BinaryOperator::EQUALS:
         case BinaryOperator::NEQUALS:
         case BinaryOperator::LESS:
         case BinaryOperator::GREATER:
         case BinaryOperator::LEQUALS:
         case BinaryOperator::GEQUALS:
-          break;
+        case BinaryOperator::BIT_AND:
+        case BinaryOperator::BIT_OR:
+            break;
         }
 }
 
@@ -175,10 +188,7 @@ void ConstExprVisitor::visitCallStatement(CallStatement* stmt) {
     }
 }
 
-void ConstExprVisitor::visitVarAssignment(VarAssignment *stmt) {
-    if(stack.top().has_value()) stmt->value = new IntLit(stack.top().value());
-    stack.pop();
-}
+void ConstExprVisitor::visitVarAssignment(VarAssignment *stmt) {}
 
 void ConstExprVisitor::visitVarDeclaration(VarDeclaration *decl) {}
 
@@ -212,6 +222,7 @@ CodeGenVisitor::CodeGenVisitor() {
 
 void CodeGenVisitor::visitIntLit(IntLit* expr, const int reg) {
     textSegment.push_back(new Move(GPREGS[reg], std::to_string(expr->value)));
+    expr->type = TypeIdentifierType::I64;
 }
 
 void CodeGenVisitor::visitStringLit(StringLit* expr, const int reg) {
@@ -219,70 +230,170 @@ void CodeGenVisitor::visitStringLit(StringLit* expr, const int reg) {
 
     dataSegment.push_back(code);
     textSegment.push_back(new Move(GPREGS[reg], code->getId()));
+    expr->type = TypeIdentifierType::U64;
+}
+
+void CodeGenVisitor::visitCharLit(CharLit* expr, const int reg) {
+    textSegment.push_back(new XOR(GPREGS[reg], GPREGS[reg]));
+    std::stringstream data;
+    data << "0x" << std::hex << (int)expr->value;
+    textSegment.push_back(new Move(GPREGS8[reg], data.str()));
+    expr->type = TypeIdentifierType::CHAR;
 }
 
 void CodeGenVisitor::visitIdExpression(IdExpression* expr, const int reg) {
-    if(parameters.find(expr->id.name) != parameters.cend()) {
-        auto [type, index] = parameters.find(expr->id.name)->second;
+    const bool indexExpr = expr->index != nullptr;
+    bool global = false;
+    TypeIdentifier type;
+    std::string right = "[";
 
-        if(reg != index+FIRST_ARG+1) {
-            textSegment.push_back(new Move(GPREGS[reg], GPREGS[index+FIRST_ARG+1]));
-            deref(expr->derefDepth, GPREGS[reg]);
-        }
+    if(current->getVar(expr->id) != nullptr) {
+        const Var* var = current->getVar(expr->id);
+        const int off = offset - var->offset;
 
-        if (expr->derefDepth == type.ptrDepth) {
-            makeType(type.type, reg);
-        }
+        type = var->type;
+        
+        right.append("rsp + ");
+        right.append(std::to_string(off));
+    } else if(globalVars.find(expr->id.name) != globalVars.cend()) {
+        type = globalVars.find(expr->id.name)->second;
+
+        right.append(expr->id.name);
+        global = true;
     } else {
-        if(current->getVar(expr->id) != nullptr) {
-            const Var* var = current->getVar(expr->id);
-            const int off = offset - var->offset;
+        throw std::runtime_error("can't resolve symbol: \"" + expr->id.name + "\"");
+    }
 
-            textSegment.push_back(new Move(GPREGS[reg], "qword [rsp + " + std::to_string(off) + "]"));
-            deref(expr->derefDepth, GPREGS[reg]);
+    right.append("]");
 
-            if (expr->derefDepth == var->type.ptrDepth) {
-                makeType(var->type.type, reg);
-            }
-        } else {
-            if(globalVars.find(expr->id.name) != globalVars.cend()) {
-                auto type = globalVars.find(expr->id.name)->second;
+    if(global || loadAddress) textSegment.push_back(new LoadEffectiveAddr(GPREGS[reg], right));
+    else textSegment.push_back(new Move(GPREGS[reg], right));
 
-                textSegment.push_back(new Move(GPREGS[reg], "[" + expr->id.name + "]"));
-                deref(expr->derefDepth, GPREGS[reg]);
+    if(indexExpr) {
+        int indexReg = allocator.allocate();
+        expr->index->accept(this, indexReg);
+        textSegment.push_back(new Add(GPREGS[reg], GPREGS[indexReg]));
+        if(!loadAddress) textSegment.push_back(new Move(GPREGS[reg], "[" + GPREGS[reg] + "]"));
+        allocator.free(indexReg);
+    }
 
-                if (expr->derefDepth == type.ptrDepth) {
-                    makeType(type.type, reg);
-                }
-            } else {
-                throw std::runtime_error("can't resolve symbol: \"" + expr->id.name + "\"");
-            }
-        }
+    deref(expr->derefDepth, GPREGS[reg]);
+
+    expr->type = TypeIdentifierType::U64;
+    if (expr->derefDepth == type.ptrDepth && !loadAddress) {
+        makeType(type.type, reg);
+        expr->type = type.type;
     }
 }
 
 void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr, const int reg) {
     int r = allocator.allocate();
-    expr->left->accept(this, reg);
+    int lr = reg;
+
+    if((expr->op == BinaryOperator::DIV || expr->op == BinaryOperator::MOD) && reg != 7) {
+        lr = 7;
+        if(usedRegs[0]) push("rax");
+    }
+
+    expr->left->accept(this, lr);
     expr->right->accept(this, r);
+
+    std::string lReg, rReg;
+    auto type = expr->right->type;
+    expr->type = type;
+    bool sign = false;
+
+    switch (type) {
+    case TypeIdentifierType::I8:
+        lReg = GPREGS8[lr];
+        rReg = GPREGS8[r];
+        sign = true;
+        break;
+    case TypeIdentifierType::I16:
+        lReg = GPREGS16[lr];
+        rReg = GPREGS16[r];
+        sign = true;
+        break;
+    case TypeIdentifierType::I32:
+        lReg = GPREGS32[lr];
+        rReg = GPREGS32[r];
+        sign = true;
+        break;
+    case TypeIdentifierType::I64:
+        lReg = GPREGS[lr];
+        rReg = GPREGS[r];
+        sign = true;
+        break;
+    case TypeIdentifierType::U8:
+        lReg = GPREGS8[lr];
+        rReg = GPREGS8[r];
+        break;
+    case TypeIdentifierType::U16:
+        lReg = GPREGS16[lr];
+        rReg = GPREGS16[r];
+        break;
+    case TypeIdentifierType::U32:
+        lReg = GPREGS32[lr];
+        rReg = GPREGS32[r];
+        break;
+    case TypeIdentifierType::U64:
+        lReg = GPREGS[lr];
+        rReg = GPREGS[r];
+        break;
+    case TypeIdentifierType::CHAR:
+        lReg = GPREGS8[lr];
+        rReg = GPREGS8[r];
+        break;
+    case TypeIdentifierType::BOOL:
+        lReg = GPREGS8[lr];
+        rReg = GPREGS8[r];
+        break;
+    case TypeIdentifierType::F32:
+    case TypeIdentifierType::F64:
+    case TypeIdentifierType::VOID:
+    default:
+        throw std::runtime_error("Floating point and void types are unsupported");
+    }
+
     if(expr->op == BinaryOperator::PLUS) {
-        textSegment.push_back(new Add(GPREGS[reg], allocator.getReg(r)));
+        textSegment.push_back(new Add(lReg, rReg, sign));
     }
     else if(expr->op == BinaryOperator::MINUS) {
-        textSegment.push_back(new Sub(GPREGS[reg], allocator.getReg(r)));
+        textSegment.push_back(new Sub(lReg, rReg, sign));
     }
     else if(expr->op == BinaryOperator::MUL) {
-        textSegment.push_back(new Multiply(GPREGS[reg], allocator.getReg(r)));
+        textSegment.push_back(new Multiply(lReg, rReg, sign));
     }
     else if(expr->op == BinaryOperator::DIV) {
-        textSegment.push_back(new Div(GPREGS[reg], allocator.getReg(r)));
+        if(usedRegs[3]) push("rdx");
+        textSegment.push_back(new XOR("rdx", "rdx"));
+        textSegment.push_back(new Div(rReg, sign));
+        if(usedRegs[3]) pop("rdx");
+    }
+    else if(expr->op == BinaryOperator::MOD) {
+        if(usedRegs[3]) push("rdx");
+        textSegment.push_back(new XOR("rdx", "rdx"));
+        textSegment.push_back(new Div(rReg, sign));
+        textSegment.push_back(new Move(lReg, "rdx"));
+        if(usedRegs[3]) pop("rdx");
+    }
+    else if(expr->op == BinaryOperator::BIT_OR) {
+        textSegment.push_back(new OR(lReg, rReg));
+    }
+    else if(expr->op == BinaryOperator::BIT_AND) {
+        textSegment.push_back(new AND(lReg, rReg));
     }
     else {
-        textSegment.push_back(new Comparison(GPREGS[reg], allocator.getReg(r), expr->op));
+        textSegment.push_back(new Comparison(lReg, rReg, expr->op));
     }
     allocator.free(r);
 
-    deref(expr->derefDepth, GPREGS[reg]);
+    deref(expr->derefDepth, lReg);
+
+    if(lr == 7 && reg != 7) {
+        textSegment.push_back(new Move(GPREGS[reg], lReg));
+        if(usedRegs[0]) pop("rax");
+    }
 }
 
 void CodeGenVisitor::visitCallExpression(CallExpression* expr, int reg) {
@@ -327,6 +438,10 @@ void CodeGenVisitor::visitCompound(Compound* stmt) {
 }
 
 void CodeGenVisitor::visitEndCompound(EndCompound* stmt) {
+    int r = allocator.allocate();
+    for(int i = 0; i < current->getNumVars(); i++) {
+        pop(GPREGS[r]);
+    }
     current = current->getParent();
 }
 
@@ -336,9 +451,9 @@ void CodeGenVisitor::visitIf(If* stmt) {
 
     stmt->condition->accept(this, reg);
     textSegment.push_back(new Compare(GPREGS[reg], "0"));
-    textSegment.push_back(new Jump("je", "If" + std::to_string(index) + "_End"));
+    textSegment.push_back(new Jump("je", func.top()->id.name + ".If" + std::to_string(index) + "_End"));
     stmt->body->accept(this);
-    textSegment.push_back(new Label("If" + std::to_string(index) + "_End"));
+    textSegment.push_back(new Label(".If" + std::to_string(index) + "_End"));
 }
 
 void CodeGenVisitor::visitIfElse(IfElse* stmt) {
@@ -347,12 +462,12 @@ void CodeGenVisitor::visitIfElse(IfElse* stmt) {
 
     stmt->condition->accept(this, reg);
     textSegment.push_back(new Compare(GPREGS[reg], "0"));
-    textSegment.push_back(new Jump("je", "If" + std::to_string(index) + "_Else"));
+    textSegment.push_back(new Jump("je", func.top()->id.name + ".If" + std::to_string(index) + "_Else"));
     stmt->ifBody->accept(this);
-    textSegment.push_back(new Jump("jmp","If" + std::to_string(index) + "_End"));
-    textSegment.push_back(new Label("If" + std::to_string(index) + "_Else"));
+    textSegment.push_back(new Jump("jmp",func.top()->id.name + ".If" + std::to_string(index) + "_End"));
+    textSegment.push_back(new Label(func.top()->id.name + ".If" + std::to_string(index) + "_Else"));
     stmt->elseBody->accept(this);
-    textSegment.push_back(new Label("If" + std::to_string(index) + "_End"));
+    textSegment.push_back(new Label(func.top()->id.name + ".If" + std::to_string(index) + "_End"));
 }
 
 void CodeGenVisitor::visitReturn(Return* stmt) {
@@ -421,28 +536,17 @@ void CodeGenVisitor::visitCallStatement(CallStatement* stmt) {
 }
 
 void CodeGenVisitor::visitVarAssignment(VarAssignment *stmt) {
-    int r = allocator.allocate();
-    stmt->value->accept(this, r);
+    int left = allocator.allocate();
+    int right = allocator.allocate();
+    
+    loadAddress = true;
+    stmt->lhs->accept(this, left);
+    loadAddress = false;
+    stmt->rhs->accept(this, right);
+    textSegment.push_back(new Move("[" + GPREGS[left] + "]", GPREGS[right]));
 
-    if(current->getVar(stmt->id) != nullptr) {
-        Var* var = current->getVar(stmt->id);
-        if (var->type.ptrDepth == 0) {
-            makeType(var->type.type, r);
-        }
-        textSegment.push_back(new Move("[rsp + " + std::to_string(offset - var->offset) + "]", allocator.getReg(r)));
-    } else {
-        if(globalVars.find(stmt->id.name) != globalVars.cend()) {
-            auto type = globalVars.find(stmt->id.name)->second;
-            if(type.ptrDepth == 0) {
-                makeType(type.type, r);
-            }
-            textSegment.push_back(new Move("[" + stmt->id.name + "]", allocator.getReg(r)));
-        } else {
-            throw std::runtime_error("can't resolve symbol(VarAssignment): " + stmt->id.name);
-        }
-    }
-
-    allocator.free(r);
+    allocator.free(left);
+    allocator.free(right);
 }
 
 void CodeGenVisitor::visitVarDeclaration(VarDeclaration* stmt) {
@@ -450,9 +554,19 @@ void CodeGenVisitor::visitVarDeclaration(VarDeclaration* stmt) {
         push("qword 0");
         current->addVar(stmt->id, Var{offset, stmt->type});
     } else {
-        dataSegment.push_back(new DefineVar(stmt->id.name, "dq", "0"));
-        globalVars.insert({stmt->id.name, stmt->type});
-        globals.push_back(stmt->id.name);
+        if(stmt->size != nullptr) {
+            IntLit* value = dynamic_cast<IntLit*>(stmt->size);
+            if(value == nullptr) {
+                throw std::runtime_error("expected IntLit but found: " + stmt->size->toString(0));
+            }
+            bssSegment.push_back(new DefineVar(stmt->id.name, "resb", std::to_string(value->value)));
+            globalVars.insert({stmt->id.name, stmt->type});
+            globals.push_back(stmt->id.name);
+        } else {
+            dataSegment.push_back(new DefineVar(stmt->id.name, "dq", "0"));
+            globalVars.insert({stmt->id.name, stmt->type});
+            globals.push_back(stmt->id.name);
+        }
     }
 }
 
@@ -467,11 +581,17 @@ void CodeGenVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
         IntLit* expr = dynamic_cast<IntLit*>(stmt->value);
         StringLit* str = dynamic_cast<StringLit*>(stmt->value);
         if(expr != nullptr) {
-            dataSegment.push_back(new DefineVar(stmt->id.name, "dq", std::to_string(expr->value)));
+            if(stmt->constant)
+                ROSegment.push_back(new DefineVar(stmt->id.name, "dq", std::to_string(expr->value)));
+            else 
+                dataSegment.push_back(new DefineVar(stmt->id.name, "dq", std::to_string(expr->value)));
             globalVars.insert({stmt->id.name, stmt->type});
             globals.push_back(stmt->id.name);
         } else if(str != nullptr) {
-            dataSegment.push_back(new DefineVar(stmt->id.name, "db", str->value));
+            if(stmt->constant)
+                ROSegment.push_back(new DefineVar(stmt->id.name, "db", str->value));
+            else
+                dataSegment.push_back(new DefineVar(stmt->id.name, "db", str->value));
             globalVars.insert({stmt->id.name, stmt->type});
             globals.push_back(stmt->id.name);
         } else {
@@ -486,14 +606,14 @@ void CodeGenVisitor::visitWhile(While* stmt)
     int r = allocator.allocate();
 
     int i = whileIndex++;
-    textSegment.push_back(new Label("while" + std::to_string(i) + "_start"));
+    textSegment.push_back(new Label(".while" + std::to_string(i) + "_start"));
     stmt->condition->accept(this, r);
     textSegment.push_back(new Compare(allocator.getReg(r), "0"));
     allocator.free(r);
-    textSegment.push_back(new Jump("je", "while" + std::to_string(i) + "_end"));
+    textSegment.push_back(new Jump("je", func.top()->id.name + ".while" + std::to_string(i) + "_end"));
     stmt->body->accept(this);
-    textSegment.push_back(new Jump("jmp", "while" + std::to_string(i) + "_start"));
-    textSegment.push_back(new Label("while" + std::to_string(i) + "_end"));
+    textSegment.push_back(new Jump("jmp", func.top()->id.name + ".while" + std::to_string(i) + "_start"));
+    textSegment.push_back(new Label(".while" + std::to_string(i) + "_end"));
 
     allocator.free(r);
 }
@@ -550,20 +670,24 @@ void CodeGenVisitor::makeType(const TypeIdentifierType type, const int reg)
     switch (type)
     {
     case TypeIdentifierType::I64:
+    case TypeIdentifierType::U64:
     case TypeIdentifierType::F64:
         break;
     case TypeIdentifierType::I8:
+    case TypeIdentifierType::U8:
     case TypeIdentifierType::CHAR:
         textSegment.push_back(new XOR(ScratchAllocator::getReg(r), ScratchAllocator::getReg(r)));
         textSegment.push_back(new Move(ScratchAllocator::getReg8(r), GPREGS8[reg]));
         textSegment.push_back(new Move(GPREGS[reg], ScratchAllocator::getReg(r)));
         break;
     case TypeIdentifierType::I16:
+    case TypeIdentifierType::U16:
         textSegment.push_back(new XOR(ScratchAllocator::getReg(r), ScratchAllocator::getReg(r)));
         textSegment.push_back(new Move(ScratchAllocator::getReg16(r), GPREGS16[reg]));
         textSegment.push_back(new Move(GPREGS8[reg], ScratchAllocator::getReg(r)));
         break;
     case TypeIdentifierType::I32:
+    case TypeIdentifierType::U32:
     case TypeIdentifierType::F32:
         textSegment.push_back(new XOR(ScratchAllocator::getReg(r), ScratchAllocator::getReg(r)));
         textSegment.push_back(new Move(ScratchAllocator::getReg32(r), GPREGS32[reg]));
@@ -573,6 +697,7 @@ void CodeGenVisitor::makeType(const TypeIdentifierType type, const int reg)
     case TypeIdentifierType::BOOL:
         std::cerr << "Void and Bool types are unsupported right now" << std::endl;
         exit(EXIT_FAILURE);
+      break;
     }
     allocator.free(r);
 }
@@ -595,6 +720,14 @@ std::vector<OpCode*> CodeGenVisitor::getDataSegment() {
 
 std::vector<OpCode*> CodeGenVisitor::getTextSegment() {
     return textSegment;
+}
+
+std::vector<OpCode*> CodeGenVisitor::getROSegment() {
+    return ROSegment;
+}
+
+std::vector<OpCode*> CodeGenVisitor::getBssSegment() {
+    return bssSegment;
 }
 
 std::vector<std::string> CodeGenVisitor::getGlobals() {

@@ -1,4 +1,8 @@
+let buf: char[20];
+
 fn main(argc: i64, argv: char**) -> i32 {
-    puts("Hello, World!\n");
+    puts("Input name: ");
+    gets(buf, 20);
+    puts(buf);
     return 0;
 }

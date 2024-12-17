@@ -1,12 +1,35 @@
-let STDIN:  i32 = 0;
-let STDOUT: i32 = 1;
-let STDERR: i32 = 2;
+const STDIN: u32            = 0;
+const STDOUT: u32           = 1;
+const STDERR: u32           = 2;
 
-fn sys_read(fd: i32, buf: char*, count: i64) -> i64 {
+const PROT_READ: u64        = 4;
+const PROT_WRITE: u64       = 2;
+const PROT_EXEC: u64        = 1;
+
+const MAP_FILE: u64         = 1;
+const MAP_ANON: u64         = 2;
+const MAP_TYPE: u64         = 15;
+
+const MAP_COPY: u64         = 32;
+const MAP_SHARED: u64       = 16;
+const MAP_PRIVATE: u64      = 0;
+
+const MAP_FIXED: u64        = 256;
+const MAP_NOEXTEND: u64     = 512;
+const MAP_HASSEMAPHORE: u64 = 1024;
+const MAP_INHERIT: u64      = 2048;
+
+const MADV_NORMAL: u64      = 0;
+const MADV_RANDOM: u64      = 1;
+const MADV_SEQUENTIAL: u64  = 2;
+const MADV_WILLNEED: u64    = 3;
+const MADV_DONTNEED: u64    = 4;
+
+fn sys_read(fd: u32, buf: char*, count: u64) -> i64 {
     return syscall(0, fd, buf, count, 0, 0, 0);
 }
 
-fn sys_write(fd: i32, buf: char*, count: i64) -> i64 {
+fn sys_write(fd: u32, buf: char*, count: u64) -> i64 {
     return syscall(1, fd, buf, count, 0, 0, 0);
 }
 
@@ -14,15 +37,15 @@ fn sys_open(filename: char*, flags: i32, mode: i32) -> i64 {
     return syscall(2, filename, flags, mode, 0, 0, 0);
 }
 
-fn sys_close(fd: i32) -> i64 {
+fn sys_close(fd: u32) -> i64 {
     return syscall(3, fd, 0, 0, 0, 0, 0);
 }
 
-fn sys_mmap(addr: i64, len: i64, prot: i64, flags: i64, fd: i64, off: i64) -> i64 {
+fn sys_mmap(addr: u64, len: u64, prot: u64, flags: u64, fd: u64, off: u64) -> i64 {
     return syscall(9, addr, len, prot, flags, fd, off);
 }
 
-fn sys_munmap(addr: i64, len: i64) -> i64 {
+fn sys_munmap(addr: u64, len: u64) -> i64 {
     return syscall(11, addr, len, 0, 0, 0, 0);
 }
 

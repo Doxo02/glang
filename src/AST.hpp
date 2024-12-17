@@ -15,7 +15,7 @@
 class Visitor;
 
 enum class TypeIdentifierType {
-    I8, I16, I32, I64, VOID, CHAR, F32, F64, BOOL
+    I8, I16, I32, I64, U8, U16, U32, U64, VOID, CHAR, F32, F64, BOOL
 };
 
 inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
@@ -38,7 +38,15 @@ inline std::string typeIdentifierTypeToString(TypeIdentifierType type) {
             return "F64";
         case TypeIdentifierType::BOOL:
             return "BOOL";
-    }
+        case TypeIdentifierType::U8:
+            return "U8";
+        case TypeIdentifierType::U16:
+            return "U16";
+        case TypeIdentifierType::U32:
+            return "U32";
+        case TypeIdentifierType::U64:
+            return "U64";
+        }
     return "";
 }
 
@@ -59,11 +67,12 @@ public:
     virtual void accept(Visitor* visitor, int reg) = 0;
 
     int derefDepth = 0;
+    TypeIdentifierType type;
 };
 
 class IntLit final : public Expression {
 public:
-    explicit IntLit(const int value) {
+    explicit IntLit(const int value, TypeIdentifierType type = TypeIdentifierType::I64) {
         this->value = value;
     }
     std::string toString(const int indentLevel) override {
@@ -82,9 +91,29 @@ public:
     int value;
 };
 
+class CharLit final : public Expression {
+public:
+    CharLit(const char value, TypeIdentifierType type = TypeIdentifierType::CHAR) : value(value) {}
+
+    std::string toString(const int indentLevel) override {
+        std::string out;
+        for(int i = 0; i < indentLevel; i++) out.append("  ");
+        out.append("CharLit: ");
+        out.append(std::string(1, value));
+        out.append("(");
+        out.append(std::to_string(derefDepth));
+        out.append(")");
+        return out;
+    }
+
+    void accept(Visitor* visitor, int reg) override;
+
+    const char value;
+};
+
 class StringLit final : public Expression {
 public:
-    explicit StringLit(const std::string& value) {
+    explicit StringLit(const std::string& value, TypeIdentifierType type = TypeIdentifierType::U64) {
         this->value = value;
     }
     std::string toString(const int indentLevel) override {
@@ -105,8 +134,9 @@ public:
 
 class IdExpression final : public Expression {
 public:
-    explicit IdExpression(const Identifier& id) {
+    explicit IdExpression(const Identifier& id, Expression* index = nullptr) {
         this->id = id;
+        this->index = index;
     }
 
     std::string toString(const int indentLevel) override {
@@ -117,12 +147,19 @@ public:
         out.append("(");
         out.append(std::to_string(derefDepth));
         out.append(")");
+        if(index != nullptr) {
+            out.append("\n");
+            for(int i = 0; i < indentLevel + 1; i++) out.append("  ");
+            out.append("Index:\n");
+            out.append(index->toString(indentLevel + 2));
+        }
         return out;
     }
 
     void accept(Visitor* visitor, int reg) override;
 
     Identifier id;
+    Expression* index;
 };
 
 class BinaryExpression final : public Expression {
@@ -167,7 +204,16 @@ public:
             case BinaryOperator::GEQUALS:
                 out.append("GreaterEquals: ");
                 break;
-        }
+            case BinaryOperator::BIT_AND:
+                out.append("BitAnd: ");
+                break;
+            case BinaryOperator::BIT_OR:
+                out.append("BitOr: ");
+                break;
+            case BinaryOperator::MOD:
+                out.append("Mod: ");
+                break;
+            }
         out.append("(");
         out.append(std::to_string(derefDepth));
         out.append(")\n");
@@ -371,31 +417,37 @@ public:
 
 class VarAssignment final : public Statement {
 public:
-    VarAssignment(const Identifier& id, Expression* value) {
-        this->id = id;
-        this->value = value;
+    VarAssignment(Expression* lhs, Expression* rhs) {
+        this->lhs = lhs;
+        this->rhs = rhs;
     }
 
     std::string toString(const int indentLevel) override {
         std::string out;
         for(int i = 0; i < indentLevel; i++) out.append("  ");
-        out.append(id.name);
+        out.append("Assign:\n");
+        for(int i = 0; i < indentLevel + 1; i++) out.append("  ");
+        out.append("Left:\n");
+        out.append(lhs->toString(indentLevel + 2));
         out.append(":\n");
-        out.append(value->toString(indentLevel + 1));
+        for(int i = 0; i < indentLevel + 1; i++) out.append("  ");
+        out.append("Right:\n");
+        out.append(rhs->toString(indentLevel + 2));
         return out;
     }
 
     void accept(Visitor* visitor) override;
 
-    Identifier id;
-    Expression* value;
+    Expression* lhs;
+    Expression* rhs;
 };
 
 class VarDeclaration final : public Statement {
 public:
-    VarDeclaration(const Identifier& id, const TypeIdentifier type) {
+    VarDeclaration(const Identifier& id, const TypeIdentifier type, Expression* size = nullptr) {
         this->id = id;
         this->type = type;
+        this->size = size;
     }
 
     std::string toString(const int indentLevel) override {
@@ -414,14 +466,16 @@ public:
     
     Identifier id;
     TypeIdentifier type;
+    Expression* size;
 };
 
 class VarDeclAssign final : public Statement {
 public:
-    VarDeclAssign(const Identifier& id, const TypeIdentifier type, Expression* value) {
+    VarDeclAssign(const Identifier& id, const TypeIdentifier type, Expression* value, bool constant = false) {
         this->id = id;
         this->type = type;
         this->value = value;
+        this->constant = constant;
     }
 
     std::string toString(const int indentLevel) override {
@@ -443,6 +497,7 @@ public:
     Identifier id;
     TypeIdentifier type;
     Expression* value;
+    bool constant;
 };
 
 class While final : public Statement
@@ -584,6 +639,10 @@ public:
         return &vars.find(id.name)->second;
     }
 
+    int getNumVars() {
+        return vars.size();
+    }
+
 private:
     Scope* parent;
     std::map<std::string, Var> vars;
@@ -594,6 +653,7 @@ public:
     virtual ~Visitor() = default;
     virtual void visitIntLit(IntLit* expr, int reg) = 0;
     virtual void visitStringLit(StringLit* expr, int reg) = 0;
+    virtual void visitCharLit(CharLit* expr, int reg) = 0;
     virtual void visitIdExpression(IdExpression* expr, int reg) = 0;
     virtual void visitBinaryExpression(BinaryExpression* expr, int reg) = 0;
     virtual void visitCallExpression(CallExpression* expr, int reg) = 0;
@@ -617,6 +677,7 @@ class ConstExprVisitor : public Visitor {
 public:
     void visitIntLit(IntLit* expr, int reg) override;
     void visitStringLit(StringLit* expr, int reg) override;
+    void visitCharLit(CharLit* expr, int reg) override;
     void visitIdExpression(IdExpression* expr, int reg) override;
     void visitBinaryExpression(BinaryExpression* expr, int reg) override;
 
@@ -643,6 +704,7 @@ public:
 
     void visitIntLit(IntLit* expr, int reg) override;
     void visitStringLit(StringLit* expr, int reg) override;
+    void visitCharLit(CharLit* expr, int reg) override;
     void visitIdExpression(IdExpression* expr, int reg) override;
     void visitBinaryExpression(BinaryExpression* expr, int reg) override;
     void visitCallExpression(CallExpression* expr, int reg) override;
@@ -665,6 +727,8 @@ public:
 
     std::vector<OpCode*> getDataSegment();
     std::vector<OpCode*> getTextSegment();
+    std::vector<OpCode*> getBssSegment();
+    std::vector<OpCode*> getROSegment();
     std::vector<std::string> getGlobals();
 
     ScratchAllocator* getScratchAlloctor() { return &allocator; }
@@ -691,12 +755,15 @@ private:
     std::stack<size_t> offsetStack;
     std::stack<std::map<std::string, FunctionDefinition::ParamData>> parameterStack;
     std::stack<std::array<bool, 7>> usedRegStack;
+    std::stack<TypeIdentifierType> typeStack;
 
     std::map<std::string, FunctionDefinition::ParamData> parameters;
     std::map<std::string, TypeIdentifier> globalVars;
 
     std::vector<OpCode*> dataSegment;
     std::vector<OpCode*> textSegment;
+    std::vector<OpCode*> bssSegment;
+    std::vector<OpCode*> ROSegment;
     std::vector<std::string> globals;
 
     int stringIndex = 0;
@@ -706,6 +773,8 @@ private:
     size_t offset = 0;
 
     ScratchAllocator allocator;
+
+    bool loadAddress = false;
 };
 
 #endif

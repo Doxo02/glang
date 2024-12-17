@@ -9,13 +9,14 @@
 
 class Parser {
 public:
-    explicit Parser(std::vector<Token> tokens, bool core = true);
+    explicit Parser(std::vector<Token> tokens, std::string path, bool core = true);
     ~Parser() = default;
 
     Program* parse();
 
 private:
     std::vector<Token> tokens;
+    std::string path;
     int counter = 0;
     bool core;
 
@@ -26,14 +27,17 @@ private:
     Expression* parseExpression(int until);
     Expression* parseCallExpression(int until);
     Expression* parseParen(int until);
+    Expression* parseBitOrAnd(int until);
     Expression* parseAddSub(int until);
     Expression* parseMulDiv(int until);
     Expression* parseCompares(int until);
     Expression* parseSingle();
 
-    void consume(TokType type, const std::string& errorMsg);
+    void consume(TokType type);
+    void expectIdentifier();
     std::optional<int> consumeInt();
     std::optional<std::string> consumeString();
+    std::optional<char> consumeChar();
     Token peek(int i = 0);
     [[nodiscard]] int findNext(TokType type, int until) const;
     [[nodiscard]] int findNextOutsideParen(TokType type, int until) const;
