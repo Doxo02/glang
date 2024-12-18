@@ -320,16 +320,23 @@ class Comparison final : public OpCode
 {
 public:
 
-    Comparison(const std::string& first, const std::string& second, BinaryOperator op) {
+    Comparison(const std::string& first, const std::string& second, const std::string& cmp1, const std::string& cmp2, const std::string& reg, BinaryOperator op) {
         this->first = first;
         this->second = second;
         this->op = op;
+        this->cmp1 = cmp1;
+        this->cmp2 = cmp2;
+        this->reg = reg;
     }
 
     std::string genNasm() override
     {
-        std::string out = "\tmov rcx, 0\n";
-        out.append("\tmov rdx, 1\n");
+        std::string out = "\tmov ";
+        out.append(cmp1);
+        out.append(", 0\n");
+        out.append("\tmov ");
+        out.append(cmp2);
+        out.append(", 1\n");
         out.append("\tcmp ");
         out.append(first);
         out.append(", ");
@@ -366,16 +373,23 @@ public:
             break;
         }
 
-        out.append(" rcx, rdx\n");
-        out.append("\tmov ");
+        out.append(" ");
+        out.append(cmp1);
+        out.append(", ");
+        out.append(cmp2);
+        out.append("\n\tmov ");
         out.append(first);
-        out.append(", rcx");
+        out.append(", ");
+        out.append(reg);
         return out;
     }
 
 private:
     std::string first;
     std::string second;
+    std::string cmp1;
+    std::string cmp2;
+    std::string reg;
     BinaryOperator op;
 };
 

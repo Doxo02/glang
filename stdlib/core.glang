@@ -13,16 +13,42 @@ fn strlen(str: char*) -> u64 {
 fn itos(x: i64, buf: char*) -> void {
     let i: u64 = 0;
 
-    while(x != 0) {
-        buf[i] = (x % 10) + '0';
-        
-        x = x / 10;
+    if(x == 0) {
+        buf[0] = '0';
+        buf[1] = '\0';
+    } else {
+        while(x != 0) {
+            buf[i] = (x % 10) + '0';
+
+            x = x / 10;
+            i = i + 1;
+        }
+        buf[i] = '\0';
+    }
+    reverse_string(buf);
+}
+
+fn stoi(str: char*) -> i64 {
+    let len: u64 = strlen(str);
+    let i: u64 = 0;
+    let x: i64 = 0;
+    let sign: i64 = 1;
+
+    if(str[0] != '-') {
+        sign = -1;
+        i = 1;
+        putc(str[0]);
+        puts("negative\n");
+    }
+
+    while(i < len) {
+        let digit: char = str[i] - '0';
+        putc(digit + '0');
+        x = x * 10 + digit;
         i = i + 1;
     }
 
-    buf[i] = '\0';
-
-    reverse_string(buf);
+    return x * sign;
 }
 
 fn reverse_string(str: char*) -> void {
@@ -30,11 +56,21 @@ fn reverse_string(str: char*) -> void {
     let n: u64 = len / 2;
     let i: u64 = 0;
 
-    while(i < n) {
+    while(i <= n) {
         let c: char = str[i];
-        str[i] = str[len - i - 1];
-        str[len-i-1] = c;
+        let index: u64 = len-1;
+        index = index - i;
+        str[i] = str[index];
+        str[index] = c;
+        i = i + 1;
     }
+}
+
+let putc_buffer: char[1];
+
+fn putc(c: char) -> void {
+    putc_buffer[0] = c;
+    sys_write(STDOUT, putc_buffer, 1);
 }
 
 fn puts(str: char*) -> void {

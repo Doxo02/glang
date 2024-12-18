@@ -22,7 +22,7 @@ private:
 
     Statement* parseStatement(bool funcBody = false);
     std::vector<Expression*> parseArgs(int until);
-    std::map<std::string, FunctionDefinition::ParamData> parseParameters();
+    std::vector<FunctionDefinition::ParamData> parseParameters();
 
     Expression* parseExpression(int until);
     Expression* parseCallExpression(int until);
@@ -41,6 +41,7 @@ private:
     Token peek(int i = 0);
     [[nodiscard]] int findNext(TokType type, int until) const;
     [[nodiscard]] int findNextOutsideParen(TokType type, int until) const;
+    [[nodiscard]] int findLastOutsideParen(TokType type, int until) const;
     [[nodiscard]] int findEndParen() const;
 
     static TypeIdentifierType strToTypeId(const std::string& str);

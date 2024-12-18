@@ -1,8 +1,12 @@
 let buf: char[20];
 
 fn main(argc: i64, argv: char**) -> i32 {
-    puts("Input name: ");
+    puts("Enter a number: ");
     gets(buf, 20);
+    let x: i64 = stoi(buf);
+    puts("before conversion: ");
+    puts(buf);
+    itos(x, buf);
     puts(buf);
     return 0;
 }

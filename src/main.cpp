@@ -6,7 +6,7 @@
 #include "Lexer.hpp"
 #include "Parser.hpp"
 
-void printParseTree(Program* program);
+void printParseTree(const Program* program);
 
 int main(int argc, char** argv) {
     bool asLib = false;
@@ -18,10 +18,10 @@ int main(int argc, char** argv) {
     }
     if(argc > 2) {
         for(int i = 2; i < argc; i++) {
-            if(std::string(argv[i]).compare("-L") == 0) {
+            if(std::string(argv[i]) == "-L") {
                 asLib = true;
             }
-            if(std::string(argv[i]).compare("--no-core") == 0) {
+            if(std::string(argv[i]) == "--no-core") {
                 core = false;
             }
         }
@@ -48,12 +48,12 @@ int main(int argc, char** argv) {
     //ConstExprVisitor cVisitor;
     //program->accept(&cVisitor);
 
-    printParseTree(program);
+    //printParseTree(program);
 
-    std::cout << "Codegen..." << std::endl;
-
+    TypeChecker typeChecker;
     CodeGenVisitor visitor;
 
+    program->accept(&typeChecker);
     program->accept(&visitor);
 
     auto data = visitor.getDataSegment();
@@ -77,10 +77,10 @@ int main(int argc, char** argv) {
         outFile << "\tsyscall" << std::endl;
     }
 
-    for(std::string label : globals) {
+    for(const std::string& label : globals) {
         outFile << "global " << label << std::endl;
     }
-    for(std::string label : externs) {
+    for(const std::string& label : externs) {
         outFile << "extern " << label << std::endl;
     }
 
@@ -108,8 +108,8 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-void printParseTree(Program* program) {
-    for (FunctionDefinition* def : program->functions) {
+void printParseTree(const Program* program) {
+    for (const FunctionDefinition* def : program->functions) {
         std::cout << def->toString(0) << std::endl;
     }
 }

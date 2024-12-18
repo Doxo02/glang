@@ -67,7 +67,10 @@ public:
     virtual void accept(Visitor* visitor, int reg) = 0;
 
     int derefDepth = 0;
-    TypeIdentifierType type;
+    TypeIdentifier type;
+    int lineNum = 0;
+    int colNum = 0;
+    std::string path;
 };
 
 class IntLit final : public Expression {
@@ -264,6 +267,10 @@ public:
     virtual std::string toString(int indentLevel) = 0;
 
     virtual void accept(Visitor* visitor) = 0;
+
+    int lineNum = 0;
+    int colNum = 0;
+    std::string path;
 };
 
 class Compound final : public Statement {
@@ -532,11 +539,12 @@ public:
 class FunctionDefinition {
 public:
     struct ParamData {
+        std::string name;
         TypeIdentifier type;
         int index;
     };
 
-    FunctionDefinition(const Identifier& id, Statement* body, const TypeIdentifier returnType, const std::map<std::string, ParamData>& args) {
+    FunctionDefinition(const Identifier& id, Statement* body, const TypeIdentifier returnType, const std::vector<ParamData>& args) {
         this->id = id;
         this->body = body;
         this->returnType = returnType;
@@ -560,9 +568,9 @@ public:
 
         for(int i = 0; i < indentLevel+1; i++) out.append("  ");
         out.append("Args:\n");
-        for(const auto& [name, data] : args) {
+        for(const auto& data : args) {
             for(int i = 0; i < indentLevel+2; i++) out.append("  ");
-            out.append(name);
+            out.append(data.name);
             out.append(": ");
             out.append(typeIdentifierTypeToString(data.type.type));
             out.append("(");
@@ -583,7 +591,11 @@ public:
     Identifier id;
     Statement* body;
     TypeIdentifier returnType;
-    std::map<std::string, ParamData> args;
+    std::vector<ParamData> args;
+
+    int lineNum = 0;
+    int colNum = 0;
+    std::string path;
 };
 
 class Program {
@@ -607,6 +619,7 @@ public:
     std::vector<FunctionDefinition*> functions;
     std::vector<std::string> externs;
     std::map<std::string, TypeIdentifier> externVars;
+    std::map<std::string, FunctionDefinition*> externFunctions;
 };
 
 struct Var {
@@ -630,7 +643,7 @@ public:
     }
 
     Var* getVar(const Identifier& id) {
-        if(vars.find(id.name) == vars.cend()) {
+        if(!vars.contains(id.name)) {
             if(parent != nullptr)
                 return parent->getVar(id);
             return nullptr;
@@ -639,7 +652,8 @@ public:
         return &vars.find(id.name)->second;
     }
 
-    int getNumVars() {
+    [[nodiscard]] int getNumVars() const
+    {
         return vars.size();
     }
 
@@ -698,6 +712,57 @@ private:
     std::stack<std::optional<int>> stack;
 };
 
+class TypeChecker : public Visitor
+{
+public:
+    TypeChecker();
+
+    void visitIntLit(IntLit* expr, int reg) override;
+    void visitStringLit(StringLit* expr, int reg) override;
+    void visitCharLit(CharLit* expr, int reg) override;
+    void visitIdExpression(IdExpression* expr, int reg) override;
+    void visitBinaryExpression(BinaryExpression* expr, int reg) override;
+    void visitCallExpression(CallExpression* expr, int reg) override;
+    void visitCompound(Compound* stmt) override;
+    void visitEndCompound(EndCompound* stmt) override;
+    void visitIf(If* stmt) override;
+    void visitIfElse(IfElse* stmt) override;
+    void visitReturn(Return* stmt) override;
+    void visitCallStatement(CallStatement* stmt) override;
+    void visitVarAssignment(VarAssignment* stmt) override;
+    void visitVarDeclaration(VarDeclaration* stmt) override;
+    void visitVarDeclAssign(VarDeclAssign* stmt) override;
+    void visitWhile(While* stmt) override;
+    void visitFunctionDefinition(FunctionDefinition* def) override;
+    void visitProgram(Program* prog) override;
+
+    void addGlobals(const std::map<std::string, TypeIdentifier>& globals) {
+        for(const auto& pair : globals) {
+            globalVars.insert(pair);
+        }
+    }
+
+    void addFunctions(const std::map<std::string, FunctionDefinition*>& functions) {
+        for(const auto& pair : functions) {
+            this->functions.insert(pair);
+        }
+    }
+private:
+    void checkFunctionCall(const FunctionDefinition* function, const std::vector<Expression*>& args, bool isExpr = false);
+
+    std::stack<TypeIdentifier> typeStack;
+    std::map<std::string, TypeIdentifier> globalVars;
+    std::vector<FunctionDefinition::ParamData> parameters;
+    std::stack<std::map<std::string, FunctionDefinition::ParamData>> parameterStack;
+    std::map<std::string, FunctionDefinition*> functions;
+    std::map<std::string, FunctionDefinition*> externFunctions;
+
+    Scope* root;
+    Scope* current;
+
+    FunctionDefinition* currentFunction;
+};
+
 class CodeGenVisitor final : public Visitor {
 public:
     CodeGenVisitor();
@@ -732,7 +797,7 @@ public:
     std::vector<std::string> getGlobals();
 
     ScratchAllocator* getScratchAlloctor() { return &allocator; }
-    void setParams(std::map<std::string, FunctionDefinition::ParamData> p);
+    void setParams(std::vector<FunctionDefinition::ParamData> p);
     inline void addGlobals(std::map<std::string, TypeIdentifier> globals) {
         for(auto pair : globals) {
             globalVars.insert(pair);
@@ -745,7 +810,9 @@ private:
     void push(const std::string& what, size_t bytes);
     void pop(const std::string& where, size_t bytes);
 
-    void deref(int depth, const std::string& reg);
+    int getReg();
+
+    void deref(int depth, int typeDepth, const std::string& reg, const std::string& addr);
     void makeType(TypeIdentifierType type, int reg);
 
     Scope* root;
@@ -755,7 +822,6 @@ private:
     std::stack<size_t> offsetStack;
     std::stack<std::map<std::string, FunctionDefinition::ParamData>> parameterStack;
     std::stack<std::array<bool, 7>> usedRegStack;
-    std::stack<TypeIdentifierType> typeStack;
 
     std::map<std::string, FunctionDefinition::ParamData> parameters;
     std::map<std::string, TypeIdentifier> globalVars;

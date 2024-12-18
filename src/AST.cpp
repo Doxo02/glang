@@ -201,7 +201,292 @@ void ConstExprVisitor::visitFunctionDefinition(FunctionDefinition *def) {}
 
 void ConstExprVisitor::visitProgram(Program* prog) {}
 
-// CodeGenVisitor implementation
+
+////////////////////////////////////////////////////////////////////////////////
+///                             TypeChecker                                  ///
+////////////////////////////////////////////////////////////////////////////////
+
+TypeChecker::TypeChecker()
+{
+    root = new Scope(nullptr);
+    current = root;
+}
+
+void TypeChecker::visitIntLit(IntLit* expr, int reg)
+{
+    expr->type = TypeIdentifier{TypeIdentifierType::I64, 0};
+    typeStack.push(expr->type);
+}
+
+void TypeChecker::visitStringLit(StringLit* expr, int reg)
+{
+    expr->type = TypeIdentifier{TypeIdentifierType::CHAR, 1};
+    typeStack.push(expr->type);
+}
+
+void TypeChecker::visitCharLit(CharLit* expr, int reg)
+{
+    expr->type = TypeIdentifier{TypeIdentifierType::CHAR, 0};
+    typeStack.push(expr->type);
+}
+
+void TypeChecker::visitIdExpression(IdExpression* expr, int reg)
+{
+    bool indexExpr = expr->index != nullptr;
+    TypeIdentifier* type = nullptr;
+    if (current->getVar(expr->id) != nullptr)
+    {
+        type = &current->getVar(expr->id)->type;
+    }
+    else
+    {
+        for (auto data : parameters)
+        {
+            if (data.name == expr->id.name)
+            {
+                type = &data.type;
+            }
+        }
+
+        if (globalVars.contains(expr->id.name))
+        {
+            type = &globalVars.find(expr->id.name)->second;
+        }
+    }
+
+    if (type == nullptr)
+    {
+        throw std::runtime_error(expr->path + ":" + std::to_string(expr->lineNum) + ":" + std::to_string(expr->colNum) + ":" + "variable " + expr->id.name + " not found");
+    }
+
+    if (indexExpr) type->ptrDepth--;
+    typeStack.push(*type);
+}
+
+void TypeChecker::visitBinaryExpression(BinaryExpression* expr, int reg)
+{
+    expr->left->accept(this, 0);
+    expr->right->accept(this, 0);
+    auto right = typeStack.top();
+    typeStack.pop();
+    auto left = typeStack.top();
+    typeStack.pop();
+
+    switch (right.type)
+    {
+        case TypeIdentifierType::I8:
+        case TypeIdentifierType::I16:
+        case TypeIdentifierType::I32:
+        case TypeIdentifierType::I64:
+        case TypeIdentifierType::U8:
+        case TypeIdentifierType::U16:
+        case TypeIdentifierType::U32:
+        case TypeIdentifierType::U64:
+        case TypeIdentifierType::CHAR:
+            right.type = TypeIdentifierType::I64;
+            break;
+        case TypeIdentifierType::F32:
+        case TypeIdentifierType::F64:
+        case TypeIdentifierType::VOID:
+            throw std::runtime_error(expr->path + ":" + std::to_string(expr->lineNum) + ":" + std::to_string(expr->colNum) + ":" + "floating point arithmetic not supported");
+        case TypeIdentifierType::BOOL:
+            break;
+    }
+    switch (left.type)
+    {
+        case TypeIdentifierType::I8:
+        case TypeIdentifierType::I16:
+        case TypeIdentifierType::I32:
+        case TypeIdentifierType::I64:
+        case TypeIdentifierType::U8:
+        case TypeIdentifierType::U16:
+        case TypeIdentifierType::U32:
+        case TypeIdentifierType::U64:
+        case TypeIdentifierType::CHAR:
+            left.type = TypeIdentifierType::I64;
+            break;
+        case TypeIdentifierType::F32:
+        case TypeIdentifierType::F64:
+            throw std::runtime_error(expr->path + ":" + std::to_string(expr->lineNum) + ":" + std::to_string(expr->colNum) + ":" + "floating point arithmetic not supported");
+        case TypeIdentifierType::VOID:
+        case TypeIdentifierType::BOOL:
+            break;
+    }
+
+    if (left.type != right.type || left.ptrDepth != right.ptrDepth)
+    {
+        throw std::runtime_error(expr->path + ":" + std::to_string(expr->lineNum) + ":" + std::to_string(expr->colNum) + ":" + "type mismatch in binary expression");
+    }
+}
+
+void TypeChecker::visitCallExpression(CallExpression* expr, int reg)
+{
+    if (functions.contains(expr->id.name))
+    {
+        checkFunctionCall(functions.find(expr->id.name)->second, expr->args, true);
+    }
+    else if (externFunctions.contains(expr->id.name))
+    {
+        checkFunctionCall(externFunctions.find(expr->id.name)->second, expr->args);
+    }
+    else
+    {
+        throw std::runtime_error(expr->path + ":" + std::to_string(expr->lineNum) + ":" + std::to_string(expr->colNum) + ":" + "function " + expr->id.name + " not found");
+    }
+}
+
+void TypeChecker::visitCompound(Compound* stmt)
+{
+    current = new Scope(current);
+}
+
+void TypeChecker::visitEndCompound(EndCompound* stmt)
+{
+    current = current->getParent();
+}
+
+void TypeChecker::visitIf(If* stmt)
+{
+    stmt->condition->accept(this, 0);
+    if (typeStack.top().type != TypeIdentifierType::BOOL)
+    {
+        throw std::runtime_error(stmt->path + ":" + std::to_string(stmt->lineNum) + ":" + std::to_string(stmt->colNum) + ":" + "expected boolean expression in if condition");
+    }
+    typeStack.pop();
+    stmt->body->accept(this);
+}
+
+void TypeChecker::visitIfElse(IfElse* stmt)
+{
+    stmt->condition->accept(this, 0);
+    if (typeStack.top().type != TypeIdentifierType::BOOL)
+    {
+        throw std::runtime_error(stmt->path + ":" + std::to_string(stmt->lineNum) + ":" + std::to_string(stmt->colNum) + ":" + "expected boolean expression in if condition");
+    }
+    typeStack.pop();
+    stmt->ifBody->accept(this);
+    stmt->elseBody->accept(this);
+}
+
+void TypeChecker::visitReturn(Return* stmt)
+{
+    stmt->value->accept(this, 0);
+    const auto type = typeStack.top();
+    typeStack.pop();
+    if (currentFunction->returnType.type != type.type || currentFunction->returnType.ptrDepth != type.ptrDepth)
+    {
+        throw std::runtime_error(stmt->path + ":" + std::to_string(stmt->lineNum) + ":" + std::to_string(stmt->colNum) + ":" + "type mismatch in return statement");
+    }
+}
+
+void TypeChecker::visitCallStatement(CallStatement* stmt)
+{
+    if (functions.contains(stmt->id.name))
+    {
+        checkFunctionCall(functions.find(stmt->id.name)->second, stmt->arguments);
+    }
+    else if (externFunctions.contains(stmt->id.name))
+    {
+        checkFunctionCall(externFunctions.find(stmt->id.name)->second, stmt->arguments);
+    }
+    else
+        throw std::runtime_error(stmt->path + ":" + std::to_string(stmt->lineNum) + ":" + std::to_string(stmt->colNum) + ":" + "function " + stmt->id.name + " not found");
+}
+
+void TypeChecker::visitVarAssignment(VarAssignment* stmt)
+{
+    stmt->lhs->accept(this, 0);
+    stmt->rhs->accept(this, 0);
+    const auto type = typeStack.top();
+    typeStack.pop();
+    if (typeStack.top().type != type.type || typeStack.top().ptrDepth != type.ptrDepth)
+    {
+        throw std::runtime_error(stmt->path + ":" + std::to_string(stmt->lineNum) + ":" + std::to_string(stmt->colNum) + ":" + "type mismatch in variable assignment");
+    }
+    typeStack.pop();
+}
+
+void TypeChecker::visitVarDeclaration(VarDeclaration* stmt)
+{
+    current->addVar(stmt->id, Var{0, stmt->type});
+}
+
+void TypeChecker::visitVarDeclAssign(VarDeclAssign* stmt)
+{
+    stmt->value->accept(this, 0);
+    TypeIdentifierType type = {};
+    switch (stmt->type.type)
+    {
+    case TypeIdentifierType::I8:
+    case TypeIdentifierType::I16:
+    case TypeIdentifierType::I32:
+    case TypeIdentifierType::I64:
+    case TypeIdentifierType::U8:
+    case TypeIdentifierType::U16:
+    case TypeIdentifierType::U32:
+    case TypeIdentifierType::U64:
+        type = TypeIdentifierType::I64;
+        break;
+    case TypeIdentifierType::VOID:
+    case TypeIdentifierType::CHAR:
+    case TypeIdentifierType::F32:
+    case TypeIdentifierType::F64:
+    case TypeIdentifierType::BOOL:
+        type = stmt->type.type;
+        break;
+    }
+    if (typeStack.top().type != type || typeStack.top().ptrDepth != stmt->type.ptrDepth)
+    {
+        throw std::runtime_error(stmt->path + ":" + std::to_string(stmt->lineNum) + ":" + std::to_string(stmt->colNum) + ":" + "type mismatch in variable assignment");
+    }
+    typeStack.pop();
+    current->addVar(stmt->id, Var{0, stmt->type});
+}
+
+void TypeChecker::visitWhile(While* stmt)
+{
+    stmt->condition->accept(this, 0);
+    if (typeStack.top().type != TypeIdentifierType::BOOL)
+    {
+        throw std::runtime_error(stmt->path + ":" + std::to_string(stmt->lineNum) + ":" + std::to_string(stmt->colNum) + ":" + "expected boolean expression in while condition");
+    }
+    typeStack.pop();
+    stmt->body->accept(this);
+}
+
+void TypeChecker::visitFunctionDefinition(FunctionDefinition* def)
+{
+    currentFunction = def;
+    parameters = def->args;
+    functions.insert({currentFunction->id.name, currentFunction});
+}
+
+void TypeChecker::visitProgram(Program* prog)
+{
+    externFunctions = prog->externFunctions;
+}
+
+void TypeChecker::checkFunctionCall(const FunctionDefinition* function, const std::vector<Expression*>& args, const bool isExpr)
+{
+    if (args.size() != function->args.size())
+    {
+        throw std::runtime_error(function->path + ":" + std::to_string(function->lineNum) + ":" + std::to_string(function->colNum) + ":" + "wrong number of arguments in function call");
+    }
+    for (size_t i = 0; i < args.size(); i++)
+    {
+        args.at(i)->accept(this, 0);
+        if (typeStack.top().type != function->args.at(i).type.type || typeStack.top().ptrDepth != function->args.at(i).type.ptrDepth)
+        {
+            throw std::runtime_error(function->path + ":" + std::to_string(function->lineNum) + ":" + std::to_string(function->colNum) + ":" + "type mismatch in function call");
+        }
+        typeStack.pop();
+    }
+    if (isExpr) typeStack.push(function->returnType);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///                             CodeGenVisitor                               ///
+////////////////////////////////////////////////////////////////////////////////
 
 void CodeGenVisitor::push(const std::string& what, const size_t bytes = 8) {
     textSegment.push_back(new Push(what));
@@ -222,7 +507,7 @@ CodeGenVisitor::CodeGenVisitor() {
 
 void CodeGenVisitor::visitIntLit(IntLit* expr, const int reg) {
     textSegment.push_back(new Move(GPREGS[reg], std::to_string(expr->value)));
-    expr->type = TypeIdentifierType::I64;
+    expr->type = TypeIdentifier{TypeIdentifierType::I64, 0};
 }
 
 void CodeGenVisitor::visitStringLit(StringLit* expr, const int reg) {
@@ -230,7 +515,7 @@ void CodeGenVisitor::visitStringLit(StringLit* expr, const int reg) {
 
     dataSegment.push_back(code);
     textSegment.push_back(new Move(GPREGS[reg], code->getId()));
-    expr->type = TypeIdentifierType::U64;
+    expr->type = TypeIdentifier{TypeIdentifierType::CHAR, 1};
 }
 
 void CodeGenVisitor::visitCharLit(CharLit* expr, const int reg) {
@@ -238,14 +523,14 @@ void CodeGenVisitor::visitCharLit(CharLit* expr, const int reg) {
     std::stringstream data;
     data << "0x" << std::hex << (int)expr->value;
     textSegment.push_back(new Move(GPREGS8[reg], data.str()));
-    expr->type = TypeIdentifierType::CHAR;
+    expr->type = TypeIdentifier{TypeIdentifierType::CHAR, 0};
 }
 
 void CodeGenVisitor::visitIdExpression(IdExpression* expr, const int reg) {
     const bool indexExpr = expr->index != nullptr;
     bool global = false;
     TypeIdentifier type;
-    std::string right = "[";
+    std::string right;
 
     if(current->getVar(expr->id) != nullptr) {
         const Var* var = current->getVar(expr->id);
@@ -253,42 +538,79 @@ void CodeGenVisitor::visitIdExpression(IdExpression* expr, const int reg) {
 
         type = var->type;
         
-        right.append("rsp + ");
+        right.append("[rsp + ");
         right.append(std::to_string(off));
-    } else if(globalVars.find(expr->id.name) != globalVars.cend()) {
+        right.append("]");
+    }
+    else if(globalVars.contains(expr->id.name)) {
         type = globalVars.find(expr->id.name)->second;
 
+        if (!loadAddress && type.ptrDepth == 0) right.append("[");
         right.append(expr->id.name);
+        if (!loadAddress && type.ptrDepth == 0) right.append("]");
         global = true;
-    } else {
+    }
+    else {
         throw std::runtime_error("can't resolve symbol: \"" + expr->id.name + "\"");
     }
 
-    right.append("]");
-
-    if(global || loadAddress) textSegment.push_back(new LoadEffectiveAddr(GPREGS[reg], right));
+    if(loadAddress && type.ptrDepth == 0) textSegment.push_back(new LoadEffectiveAddr(GPREGS[reg], right));
     else textSegment.push_back(new Move(GPREGS[reg], right));
 
     if(indexExpr) {
+        bool wasLoadAddress = loadAddress;
+        if (loadAddress) loadAddress = false;
+
         int indexReg = allocator.allocate();
         expr->index->accept(this, indexReg);
+        if (wasLoadAddress) loadAddress = true;
         textSegment.push_back(new Add(GPREGS[reg], GPREGS[indexReg]));
         if(!loadAddress) textSegment.push_back(new Move(GPREGS[reg], "[" + GPREGS[reg] + "]"));
         allocator.free(indexReg);
+
     }
 
-    deref(expr->derefDepth, GPREGS[reg]);
+    std::string newReg;
 
-    expr->type = TypeIdentifierType::U64;
-    if (expr->derefDepth == type.ptrDepth && !loadAddress) {
+    switch (type.type)
+    {
+    case TypeIdentifierType::I8:
+    case TypeIdentifierType::U8:
+    case TypeIdentifierType::CHAR:
+    case TypeIdentifierType::BOOL:
+        newReg = GPREGS8[reg];
+        break;
+    case TypeIdentifierType::I16:
+    case TypeIdentifierType::U16:
+        newReg = GPREGS16[reg];
+        break;
+    case TypeIdentifierType::I32:
+    case TypeIdentifierType::U32:
+        newReg = GPREGS32[reg];
+        break;
+    case TypeIdentifierType::I64:
+    case TypeIdentifierType::U64:
+        newReg = GPREGS[reg];
+        break;
+    default: break;
+    }
+
+    deref(expr->derefDepth, type.ptrDepth, newReg, GPREGS[reg]);
+
+    if (expr->derefDepth == type.ptrDepth)
+    {
         makeType(type.type, reg);
-        expr->type = type.type;
     }
+
+    expr->type = type;
 }
 
 void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr, const int reg) {
     int r = allocator.allocate();
     int lr = reg;
+
+    int cmpReg1 = allocator.allocate();
+    int cmpReg2 = allocator.allocate();
 
     if((expr->op == BinaryOperator::DIV || expr->op == BinaryOperator::MOD) && reg != 7) {
         lr = 7;
@@ -298,55 +620,67 @@ void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr, const int reg
     expr->left->accept(this, lr);
     expr->right->accept(this, r);
 
-    std::string lReg, rReg;
+    std::string lReg, rReg, regMov;
+    std::string cmp1 = GPREGS[cmpReg1];
+    std::string cmp2 = GPREGS[cmpReg2];
     auto type = expr->right->type;
     expr->type = type;
     bool sign = false;
 
-    switch (type) {
+    switch (type.type) {
     case TypeIdentifierType::I8:
         lReg = GPREGS8[lr];
         rReg = GPREGS8[r];
+        regMov = GPREGS8[cmpReg1];
         sign = true;
         break;
     case TypeIdentifierType::I16:
         lReg = GPREGS16[lr];
         rReg = GPREGS16[r];
+        regMov = GPREGS16[cmpReg1];
         sign = true;
         break;
     case TypeIdentifierType::I32:
         lReg = GPREGS32[lr];
         rReg = GPREGS32[r];
+        regMov = GPREGS32[cmpReg1];
         sign = true;
         break;
     case TypeIdentifierType::I64:
         lReg = GPREGS[lr];
         rReg = GPREGS[r];
+        regMov = GPREGS[cmpReg1];
         sign = true;
         break;
     case TypeIdentifierType::U8:
         lReg = GPREGS8[lr];
         rReg = GPREGS8[r];
+        regMov = GPREGS8[cmpReg1];
         break;
     case TypeIdentifierType::U16:
         lReg = GPREGS16[lr];
         rReg = GPREGS16[r];
+        regMov = GPREGS16[cmpReg1];
         break;
     case TypeIdentifierType::U32:
         lReg = GPREGS32[lr];
         rReg = GPREGS32[r];
+        regMov = GPREGS32[cmpReg1];
         break;
     case TypeIdentifierType::U64:
         lReg = GPREGS[lr];
         rReg = GPREGS[r];
+        regMov = GPREGS[cmpReg1];
         break;
     case TypeIdentifierType::CHAR:
         lReg = GPREGS8[lr];
         rReg = GPREGS8[r];
+        regMov = GPREGS8[cmpReg1];
         break;
     case TypeIdentifierType::BOOL:
         lReg = GPREGS8[lr];
         rReg = GPREGS8[r];
+        regMov = GPREGS8[cmpReg1];
         break;
     case TypeIdentifierType::F32:
     case TypeIdentifierType::F64:
@@ -384,11 +718,13 @@ void CodeGenVisitor::visitBinaryExpression(BinaryExpression* expr, const int reg
         textSegment.push_back(new AND(lReg, rReg));
     }
     else {
-        textSegment.push_back(new Comparison(lReg, rReg, expr->op));
+        textSegment.push_back(new Comparison(lReg, rReg, cmp1, cmp2, regMov, expr->op));
     }
     allocator.free(r);
+    allocator.free(cmpReg1);
+    allocator.free(cmpReg2);
 
-    deref(expr->derefDepth, lReg);
+    deref(expr->derefDepth, type.ptrDepth, lReg, GPREGS[reg]);
 
     if(lr == 7 && reg != 7) {
         textSegment.push_back(new Move(GPREGS[reg], lReg));
@@ -411,7 +747,8 @@ void CodeGenVisitor::visitCallExpression(CallExpression* expr, int reg) {
         }
 
         textSegment.push_back(new Syscall());
-    } else {
+    }
+    else {
         for (int i = 0; i < expr->args.size(); i++)
         {
             auto arg = expr->args.at(i);
@@ -438,10 +775,6 @@ void CodeGenVisitor::visitCompound(Compound* stmt) {
 }
 
 void CodeGenVisitor::visitEndCompound(EndCompound* stmt) {
-    int r = allocator.allocate();
-    for(int i = 0; i < current->getNumVars(); i++) {
-        pop(GPREGS[r]);
-    }
     current = current->getParent();
 }
 
@@ -451,6 +784,7 @@ void CodeGenVisitor::visitIf(If* stmt) {
 
     stmt->condition->accept(this, reg);
     textSegment.push_back(new Compare(GPREGS[reg], "0"));
+    allocator.free(reg);
     textSegment.push_back(new Jump("je", func.top()->id.name + ".If" + std::to_string(index) + "_End"));
     stmt->body->accept(this);
     textSegment.push_back(new Label(".If" + std::to_string(index) + "_End"));
@@ -462,12 +796,13 @@ void CodeGenVisitor::visitIfElse(IfElse* stmt) {
 
     stmt->condition->accept(this, reg);
     textSegment.push_back(new Compare(GPREGS[reg], "0"));
+    allocator.free(reg);
     textSegment.push_back(new Jump("je", func.top()->id.name + ".If" + std::to_string(index) + "_Else"));
     stmt->ifBody->accept(this);
     textSegment.push_back(new Jump("jmp",func.top()->id.name + ".If" + std::to_string(index) + "_End"));
-    textSegment.push_back(new Label(func.top()->id.name + ".If" + std::to_string(index) + "_Else"));
+    textSegment.push_back(new Label(".If" + std::to_string(index) + "_Else"));
     stmt->elseBody->accept(this);
-    textSegment.push_back(new Label(func.top()->id.name + ".If" + std::to_string(index) + "_End"));
+    textSegment.push_back(new Label(".If" + std::to_string(index) + "_End"));
 }
 
 void CodeGenVisitor::visitReturn(Return* stmt) {
@@ -543,7 +878,33 @@ void CodeGenVisitor::visitVarAssignment(VarAssignment *stmt) {
     stmt->lhs->accept(this, left);
     loadAddress = false;
     stmt->rhs->accept(this, right);
-    textSegment.push_back(new Move("[" + GPREGS[left] + "]", GPREGS[right]));
+
+    std::string rightString;
+    switch (stmt->lhs->type.type)
+    {
+    case TypeIdentifierType::I8:
+    case TypeIdentifierType::U8:
+    case TypeIdentifierType::CHAR:
+    case TypeIdentifierType::BOOL:
+        rightString = GPREGS8[right];
+        break;
+    case TypeIdentifierType::I16:
+    case TypeIdentifierType::U16:
+        rightString = GPREGS16[right];
+        break;
+    case TypeIdentifierType::I32:
+    case TypeIdentifierType::U32:
+    case TypeIdentifierType::F32:
+        rightString = GPREGS32[right];
+        break;
+    case TypeIdentifierType::I64:
+    case TypeIdentifierType::U64:
+    case TypeIdentifierType::F64:
+    case TypeIdentifierType::VOID:
+        rightString = GPREGS[right];
+        break;
+    }
+    textSegment.push_back(new Move("[" + GPREGS[left] + "]", rightString));
 
     allocator.free(left);
     allocator.free(right);
@@ -574,10 +935,12 @@ void CodeGenVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
     if(func.top() != nullptr) {
         int r = allocator.allocate();
         stmt->value->accept(this, r);
+        makeType(stmt->type.type, r);
         push(allocator.getReg(r));
         current->addVar(stmt->id, Var{offset, stmt->type});
         allocator.free(r);
-    } else {
+    }
+    else {
         IntLit* expr = dynamic_cast<IntLit*>(stmt->value);
         StringLit* str = dynamic_cast<StringLit*>(stmt->value);
         if(expr != nullptr) {
@@ -587,14 +950,16 @@ void CodeGenVisitor::visitVarDeclAssign(VarDeclAssign* stmt) {
                 dataSegment.push_back(new DefineVar(stmt->id.name, "dq", std::to_string(expr->value)));
             globalVars.insert({stmt->id.name, stmt->type});
             globals.push_back(stmt->id.name);
-        } else if(str != nullptr) {
+        }
+        else if(str != nullptr) {
             if(stmt->constant)
                 ROSegment.push_back(new DefineVar(stmt->id.name, "db", str->value));
             else
                 dataSegment.push_back(new DefineVar(stmt->id.name, "db", str->value));
             globalVars.insert({stmt->id.name, stmt->type});
             globals.push_back(stmt->id.name);
-        } else {
+        }
+        else {
             std::cerr << "Expected either IntLit or StringLit after global assign but found: " << stmt->value->toString(0) << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -608,10 +973,19 @@ void CodeGenVisitor::visitWhile(While* stmt)
     int i = whileIndex++;
     textSegment.push_back(new Label(".while" + std::to_string(i) + "_start"));
     stmt->condition->accept(this, r);
-    textSegment.push_back(new Compare(allocator.getReg(r), "0"));
+    textSegment.push_back(new Compare(GPREGS8[r], "0"));
     allocator.free(r);
     textSegment.push_back(new Jump("je", func.top()->id.name + ".while" + std::to_string(i) + "_end"));
+    Scope* old = current;
     stmt->body->accept(this);
+    if (old != current)
+    {
+        int reg = allocator.allocate();
+        for(int i = 0; i < current->getNumVars(); i++) {
+            pop(GPREGS[reg]);
+        }
+        allocator.free(reg);
+    }
     textSegment.push_back(new Jump("jmp", func.top()->id.name + ".while" + std::to_string(i) + "_start"));
     textSegment.push_back(new Label(".while" + std::to_string(i) + "_end"));
 
@@ -656,11 +1030,14 @@ void CodeGenVisitor::visitProgram(Program* prog) {
     }
 }
 
-void CodeGenVisitor::deref(const int depth, const std::string& reg)
+void CodeGenVisitor::deref(const int depth, const int typeDepth, const std::string& reg, const std::string& addr)
 {
     for (int i = 0 ; i < depth; i++)
     {
-        textSegment.push_back(new Move(reg, "[" + reg + "]"));
+        if (i == depth-1 && depth == typeDepth)
+            textSegment.push_back(new Move(reg, "[" + addr + "]"));
+        else
+            textSegment.push_back(new Move(addr, "[" + addr + "]"));
     }
 }
 
@@ -702,11 +1079,10 @@ void CodeGenVisitor::makeType(const TypeIdentifierType type, const int reg)
     allocator.free(r);
 }
 
-
-void CodeGenVisitor::setParams(std::map<std::string, FunctionDefinition::ParamData> p) {
+void CodeGenVisitor::setParams(std::vector<FunctionDefinition::ParamData> p) {
     for(auto arg : p) {
-        push(GPREGS[arg.second.index+FIRST_ARG+1]);
-        current->addVar(Identifier{arg.first}, {offset, arg.second.type});
+        push(GPREGS[arg.index+FIRST_ARG+1]);
+        current->addVar(Identifier{arg.name}, {offset, arg.type});
     }
 }
 
